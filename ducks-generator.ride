@@ -3,51 +3,91 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggId = base58''
-let eggsNeededAmount = 1000  # 10 EGGs
+let eggsAssetId = base58''
+let eggsNeededAmount = 10_00  # 10 EGGs
+let delayForHatching = 2
 
-func getRandomNum() = {
-  0
+let HatchingStarted = "HATCHING_STARTED"
+let HatchingFinished = "HATCHING_FINISHED"
+
+
+func getHatchingKey(pubKey: ByteVector, txId: ByteVector) = {
+  # stores the fact of hatching, 
+  # if key exists = hatcing started 
+  # if false = not claimed
+  # if true = claimed and nft id will be in the key of getDuckIdKey
+  pubKey.toBase58String() + txId.toBase58String() +  "_hk"
 }
 
-func getRandomColor() = {
-  "G"
+func getHatchingFinishHeightKey(pubKey: ByteVector, txId: ByteVector) = {
+  pubKey.toBase58String() + txId.toBase58String() +  "_fh"
 }
 
-func getGenesisDuck() = {
-  let randomNum = getRandomNum()
-  let color = getRandomColor()
-  if (randomNum > 0.5) then {
-    "DUCK-AAAAAAAA-G" + getRandomColor()
-  } else {
-    "DUCK-BBBBBBBB-G" + getRandomColor()
-  }
-  }
+func getDuckIdKey(pubKey: ByteVector, txId: ByteVector) = {
+  pubKey.toBase58String() + txId.toBase58String() +  "_di"
 }
+
+func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int) = {
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight).value()
+  (randomSeedBlock.vrf.value() + txId).toInt(10) % variants
+}
+
+func getRandomDetails(txId: ByteVector, hatchingFinishHeight: Int) = {
+  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight)
+  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight)
+  let color = if (colorRandom == 0) then "y"
+    else if (colorRandom == 1) then "g" 
+    else if (colorRandom == 2) then "b" 
+    else "r"
+
+  if (typeRandom == 0) then "AAAAAAAA-G-" + color
+    else "BBBBBBBB-G-" + color
+  
+}
+
 
 @Callable(i)
-func claimDuck() = {
-  let pmt = i.payments[0]
-  if (pmt.assetId != eggId) then {
-    throw("Wrong asset attached.")
-  } else {
-    if (pmt.amount != eggsNeededAmount) then {
-      throw("Wrong amount of tokens attached")
-    } else {
-      # let descJson = {"dna":"AAAAAAAA","genotype":"A8","crossbreeding":true,"timestamp":1619792261697,"color":"Green","generation":"genesis"}
-      
-      let desc = ""
-      let name = getGenesisDuck()
+func startDuckHatching() = {
 
-      let asset = Issue(name, desc, 1, 0, false, unit, 0)
-      let assetId = asset.calculateAssetId()
-      
+  let firstPayment = i.payments[0].value()
+
+   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+   else if (firstPayment.amount != eggsNeededAmount)  then throw("You can attach only EXACTLY 10 EGG tokens ")
+   else {
+     [
+      StringEntry(getHatchingKey(i.callerPublicKey, i.transactionId), HatchingStarted),
+      IntegerEntry(getHatchingFinishHeightKey(i.callerPublicKey, i.transactionId), height + delayForHatching)
+     ]
+  }
+
+}
+
+
+@Callable(i)
+func finishDuckHatching(txId: ByteVector) = {
+
+  let hatchingKey = getHatchingKey(i.callerPublicKey, txId)
+  let duckIdKey = getDuckIdKey(i.callerPublicKey, txId)
+  let hatchingTxStatus = getStringValue(this, hatchingKey)
+  let hatchingFinishHeight = getIntegerValue(this, getHatchingFinishHeightKey(i.callerPublicKey, txId))
+  
+  if (hatchingTxStatus == HatchingFinished) then {
+    let duckId = getStringValue(this, getDuckIdKey(i.callerPublicKey, txId))
+    throw("The duck was hatched and claimed already, here is the folowing: " + duckId)
+  }else 
+  if (hatchingFinishHeight < height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
+   else {
+    let duckDetails = getRandomDetails(txId, hatchingFinishHeight)
+    let description = "{\"genotype\": \"" + duckDetails + "\", \"crossbreeding\": true}"
+    let asset = Issue(duckDetails, description, 1, 0, false, unit, 0)
+    let assetId = asset.calculateAssetId()
+
       [
-        IntegerEntry("int", 1),
+        StringEntry(hatchingKey, HatchingFinished),
+        StringEntry(duckIdKey, assetId.toBase58String()),
         ScriptTransfer(i.caller, 1, assetId)
       ]
-    }
-  }
+   }
 }
 
 @Verifier(tx)
