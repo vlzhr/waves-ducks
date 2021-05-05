@@ -1,0 +1,55 @@
+
+{-# STDLIB_VERSION 4 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggId = base58''
+let eggsNeededAmount = 1000  # 10 EGGs
+
+func getRandomNum() = {
+  0
+}
+
+func getRandomColor() = {
+  "G"
+}
+
+func getGenesisDuck() = {
+  let randomNum = getRandomNum()
+  let color = getRandomColor()
+  if (randomNum > 0.5) then {
+    "DUCK-AAAAAAAA-G" + getRandomColor()
+  } else {
+    "DUCK-BBBBBBBB-G" + getRandomColor()
+  }
+  }
+}
+
+@Callable(i)
+func claimDuck() = {
+  let pmt = i.payments[0]
+  if (pmt.assetId != eggId) then {
+    throw("Wrong asset attached.")
+  } else {
+    if (pmt.amount != eggsNeededAmount) then {
+      throw("Wrong amount of tokens attached")
+    } else {
+      # let descJson = {"dna":"AAAAAAAA","genotype":"A8","crossbreeding":true,"timestamp":1619792261697,"color":"Green","generation":"genesis"}
+      
+      let desc = ""
+      let name = getGenesisDuck()
+
+      let asset = Issue(name, desc, 1, 0, false, unit, 0)
+      let assetId = asset.calculateAssetId()
+      
+      [
+        IntegerEntry("int", 1),
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+    }
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
