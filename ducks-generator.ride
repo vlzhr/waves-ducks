@@ -27,6 +27,18 @@ func getDuckIdKey(address: String, txId: ByteVector) = {
   address + "_" + txId.toBase58String() +  "_di"
 }
 
+func getDuckStatsKey(genString: String) = {
+  "stats_" + genString + "_amount"
+}
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight).value()
   (randomSeedBlock.vrf.value() + txId).toInt(10) % variants
@@ -78,19 +90,22 @@ func finishDuckHatching(txIdStr: String) = {
   } else 
     if (hatchingFinishHeight > height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
     else {
-      let duckName = getRandomName(txId, hatchingFinishHeight)
-      let description = "{\"genotype\": \"" + duckName + "\", \"crossbreeding\": true}"
+      let duckGen = getRandomName(txId, hatchingFinishHeight)
+      let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
 
-      let asset = Issue(duckName, description, 1, 0, false, unit, hatchingFinishHeight)
+      let asset = Issue(duckGen, description, 1, 0, false, unit, hatchingFinishHeight)
       let assetId = asset.calculateAssetId()
 
-        [
-          StringEntry(hatchingStatusKey, HatchingFinished),
-          StringEntry(duckIdKey, assetId.toBase58String()),
-          StringEntry(assetId.toBase58String(), duckIdKey),
-          asset,
-          ScriptTransfer(i.caller, 1, assetId)
-        ]
+      let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
+
+      [
+        StringEntry(hatchingStatusKey, HatchingFinished),
+        StringEntry(duckIdKey, assetId.toBase58String()),
+        StringEntry(assetId.toBase58String(), duckIdKey),
+        IntegerEntry(getDuckStatsKey(duckGen), amount),
+        asset,
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
     }
 }
 
