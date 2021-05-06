@@ -85,6 +85,7 @@ func instantBuy(auctionId: String) = {
         let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
         [
           StringEntry("auction_" + auctionId + "_status", "finished"),
+          IntegerEntry("auction_" + auctionId + "_finalPrice", amount),
           ScriptTransfer(addressFromStringValue(auctionOwner), amount, unit),
           ScriptTransfer(i.caller, 1, this.getBinary("auction_" + auctionId + "_assetId"))
         ]
@@ -134,7 +135,7 @@ func acceptBid(auctionId: String, bidId: String) = {
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
   let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
   let bidStatus = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status")
-  let assetId = tryGetString("auction_" + auctionId + "_assetId").fromBase58String()
+  let assetId = tryGetString("auction_" + auctionId + "_assetId")
 
   if (i.caller.toString() != auctionOwner) then {
     throw("Only allowed to auction owner")
@@ -142,10 +143,14 @@ func acceptBid(auctionId: String, bidId: String) = {
     if (bidStatus != "open") then {
       throw("Bid was cancelled and cannot be accepted")
     } else {
+      let recordPrice = tryGetInteger(assetId+"_recordPrice")
+      let newRecordPrice = max([recordPrice, bidAmount])
       [
         StringEntry("auction_" + auctionId + "_status", "finished"),
+        IntegerEntry("auction_" + auctionId + "_finalPrice", bidAmount),
+        IntegerEntry(assetId+"_recordPrice", newRecordPrice),
         ScriptTransfer(i.caller, bidAmount, unit),
-        ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId)
+        ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
       ]
     }
   }
