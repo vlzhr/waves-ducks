@@ -91,7 +91,7 @@ func instantBuy(auctionId: String) = {
           StringEntry("auction_" + auctionId + "_status", "finished"),
           IntegerEntry("auction_" + auctionId + "_finalPrice", amount),
           ScriptTransfer(addressFromStringValue(auctionOwner), amount, unit),
-          ScriptTransfer(i.caller, 1, this.getBinary("auction_" + auctionId + "_assetId"))
+          ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String())
         ]
       }
     }
