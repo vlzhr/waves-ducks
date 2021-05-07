@@ -1,0 +1,166 @@
+
+{-# STDLIB_VERSION 4 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
+func tryGetString(key: String) = {
+    let val = match getString(this, key) {
+        case b:String => b
+        case _ => ""
+    }
+    val
+}
+
+func getAssetGenotype(assetId: ByteVector) = {
+  let asset = match getString(Address(incubatorAddress), assetId.toBase58String()) {
+        case b:String => b
+        case _ => ""
+    }
+  asset
+}
+
+@Callable(i)
+func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
+  let auctionId = i.transactionId.toBase58String()
+  let pmt = i.payments[0].value()
+  let assetId = pmt.assetId.value()
+
+  let asset = getAssetGenotype(assetId)
+
+  if (asset == "") then {
+    throw("You can only sell an NFT-duck created in incubator")
+  } else {
+    [
+      StringEntry("auction_" + auctionId + "_status", "open"),
+      StringEntry("auction_" + auctionId + "_assetGen", asset),
+      StringEntry("auction_" + auctionId + "_assetId", assetId.toBase58String()),
+      IntegerEntry("auction_" + auctionId + "_startedAt", lastBlock.timestamp),
+      StringEntry("auction_" + auctionId + "_owner", i.caller.toString()),
+      StringEntry("auction_" + auctionId + "_description", description),
+      IntegerEntry("auction_" + auctionId + "_startPrice", startPrice),
+      IntegerEntry("auction_" + auctionId + "_instantPrice", instantPrice),
+      StringEntry("address_" + i.caller.toString() + "_auction_" + auctionId + "_lockedNFT", assetId.toBase58String())
+    ]
+  }
+}
+
+@Callable(i)
+func cancelAuction(auctionId: String) = {
+  let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
+  if (i.caller.toString() != auctionOwner) then {
+    throw("Only allowed to auction owner")
+  } else {
+    [
+      StringEntry("auction_" + auctionId + "_status", "cancelled"),
+      StringEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT", ""),
+      ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String())
+    ]
+  }
+}
+
+@Callable(i)
+func instantBuy(auctionId: String) = {
+  let pmt = i.payments[0].value()
+  let amount = pmt.amount
+
+  let auctionStatus = tryGetString("auction_" + auctionId + "_status")
+
+  if (pmt.assetId != unit) then {
+    throw("Auction does only support WAVES payments.")
+  } else {
+    if (auctionStatus != "open") then {
+      throw("Auction is closed. You cannot place a bid.")
+    } else {
+      let instantPrice = tryGetInteger("auction_" + auctionId + "_instantPrice")
+      if (instantPrice > amount) then {
+        throw("For instant purchase you need to pay at least " + instantPrice.toString())
+      } else {
+        let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
+        [
+          StringEntry("auction_" + auctionId + "_status", "finished"),
+          IntegerEntry("auction_" + auctionId + "_finalPrice", amount),
+          ScriptTransfer(addressFromStringValue(auctionOwner), amount, unit),
+          ScriptTransfer(i.caller, 1, this.getBinary("auction_" + auctionId + "_assetId"))
+        ]
+      }
+    }
+  }
+}
+
+@Callable(i)
+func placeBid(auctionId: String) = {
+  let pmt = i.payments[0].value()
+  let amount = pmt.amount
+  let bidId = i.transactionId.toBase58String()
+
+  if (pmt.assetId != unit) then {
+    throw("Auction does only support WAVES payments")
+  } else {
+      [
+        StringEntry("auction_" + auctionId + "_bid_" + bidId + "_author", i.caller.toString()),
+        IntegerEntry("auction_" + auctionId + "_bid_" + bidId + "_amount", amount),
+        StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "open")
+      ]
+  }
+}
+
+@Callable(i)
+func cancelBid(auctionId: String, bidId: String) = {
+  let pmt = i.payments[0].value()
+  let amount = pmt.amount
+
+  let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
+  let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
+
+  if (i.caller.toString() != bidAuthor) then {
+    throw("Only allowed to the bid author")
+  } else {
+    [
+      StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "cancelled"),
+      ScriptTransfer(i.caller, bidAmount, unit)
+    ]
+  }
+}
+
+@Callable(i)
+func acceptBid(auctionId: String, bidId: String) = {
+  let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
+  let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
+  let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
+  let bidStatus = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status")
+  let assetId = tryGetString("auction_" + auctionId + "_assetId")
+
+  if (i.caller.toString() != auctionOwner) then {
+    throw("Only allowed to auction owner")
+  } else {
+    if (bidStatus != "open") then {
+      throw("Bid was cancelled and cannot be accepted")
+    } else {
+      let recordPrice = tryGetInteger(assetId+"_recordPrice")
+      let newRecordPrice = max([recordPrice, bidAmount])
+      [
+        StringEntry("auction_" + auctionId + "_status", "finished"),
+        IntegerEntry("auction_" + auctionId + "_finalPrice", bidAmount),
+        IntegerEntry(assetId + "_recordPrice", newRecordPrice),
+        StringEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT", ""),
+        ScriptTransfer(i.caller, bidAmount, unit),
+        ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
+      ]
+    }
+  }
+}
+
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        

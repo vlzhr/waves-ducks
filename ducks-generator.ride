@@ -3,7 +3,7 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58''
+let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
 let eggsNeededAmount = 10_00  # 10 EGGs
 let delayForHatching = 2
 
@@ -11,20 +11,32 @@ let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
 
 
-func getHatchingKey(pubKey: ByteVector, txId: ByteVector) = {
+func getHatchingStatusKey(address: String, txId: ByteVector) = {
   # stores the fact of hatching, 
-  # if key exists = hatcing started 
+  # if key exists = hatching started 
   # if false = not claimed
   # if true = claimed and nft id will be in the key of getDuckIdKey
-  pubKey.toBase58String() + txId.toBase58String() +  "_hk"
+  address + "_" + txId.toBase58String() +  "_status"
 }
 
-func getHatchingFinishHeightKey(pubKey: ByteVector, txId: ByteVector) = {
-  pubKey.toBase58String() + txId.toBase58String() +  "_fh"
+func getHatchingFinishHeightKey(address: String, txId: ByteVector) = {
+  address + "_" + txId.toBase58String() +  "_fh"
 }
 
-func getDuckIdKey(pubKey: ByteVector, txId: ByteVector) = {
-  pubKey.toBase58String() + txId.toBase58String() +  "_di"
+func getDuckIdKey(address: String, txId: ByteVector) = {
+  address + "_" + txId.toBase58String() +  "_di"
+}
+
+func getDuckStatsKey(genString: String) = {
+  "stats_" + genString + "_amount"
+}
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
 }
 
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int) = {
@@ -32,16 +44,16 @@ func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int)
   (randomSeedBlock.vrf.value() + txId).toInt(10) % variants
 }
 
-func getRandomDetails(txId: ByteVector, hatchingFinishHeight: Int) = {
+func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
   let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight)
   let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight)
-  let color = if (colorRandom == 0) then "y"
-    else if (colorRandom == 1) then "g" 
-    else if (colorRandom == 2) then "b" 
-    else "r"
+  let color = if (colorRandom == 0) then "Y"
+    else if (colorRandom == 1) then "G" 
+    else if (colorRandom == 2) then "B" 
+    else "R"
 
-  if (typeRandom == 0) then "AAAAAAAA-G-" + color
-    else "BBBBBBBB-G-" + color
+  if (typeRandom == 0) then "DUCK-AAAAAAAA-G" + color
+    else "DUCK-BBBBBBBB-G" + color
   
 }
 
@@ -50,46 +62,54 @@ func getRandomDetails(txId: ByteVector, hatchingFinishHeight: Int) = {
 func startDuckHatching() = {
 
   let firstPayment = i.payments[0].value()
-
-   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+  if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
    else if (firstPayment.amount != eggsNeededAmount)  then throw("You can attach only EXACTLY 10 EGG tokens ")
    else {
      [
-      StringEntry(getHatchingKey(i.callerPublicKey, i.transactionId), HatchingStarted),
-      IntegerEntry(getHatchingFinishHeightKey(i.callerPublicKey, i.transactionId), height + delayForHatching)
+      StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
+      IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching)
      ]
   }
-
 }
 
 
 @Callable(i)
-func finishDuckHatching(txId: ByteVector) = {
+func finishDuckHatching(txIdStr: String) = {
 
-  let hatchingKey = getHatchingKey(i.callerPublicKey, txId)
-  let duckIdKey = getDuckIdKey(i.callerPublicKey, txId)
-  let hatchingTxStatus = getStringValue(this, hatchingKey)
-  let hatchingFinishHeight = getIntegerValue(this, getHatchingFinishHeightKey(i.callerPublicKey, txId))
+  let txId = fromBase58String(txIdStr)
+  let hatchingStatusKey = getHatchingStatusKey(i.caller.toString(), txId)
+  let finishHeightKey = getHatchingFinishHeightKey(i.caller.toString(), txId)
+  let duckIdKey = getDuckIdKey(i.caller.toString(), txId)
+
+  let hatchingTxStatus = getStringValue(this, hatchingStatusKey)
+  let hatchingFinishHeight = getIntegerValue(this, finishHeightKey)
   
   if (hatchingTxStatus == HatchingFinished) then {
-    let duckId = getStringValue(this, getDuckIdKey(i.callerPublicKey, txId))
+    let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
     throw("The duck was hatched and claimed already, here is the folowing: " + duckId)
-  }else 
-  if (hatchingFinishHeight < height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
-   else {
-    let duckDetails = getRandomDetails(txId, hatchingFinishHeight)
-    let description = "{\"genotype\": \"" + duckDetails + "\", \"crossbreeding\": true}"
-    let asset = Issue(duckDetails, description, 1, 0, false, unit, 0)
-    let assetId = asset.calculateAssetId()
+  } else 
+    if (hatchingFinishHeight > height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
+    else {
+      let duckGen = getRandomName(txId, hatchingFinishHeight)
+      let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+      let asset = Issue(duckGen, description, 1, 0, false, unit, hatchingFinishHeight)
+      let assetId = asset.calculateAssetId()
+
+      let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
 
       [
-        StringEntry(hatchingKey, HatchingFinished),
+        StringEntry(hatchingStatusKey, HatchingFinished),
         StringEntry(duckIdKey, assetId.toBase58String()),
+        StringEntry(assetId.toBase58String(), duckIdKey),
+        IntegerEntry(getDuckStatsKey(duckGen), amount),
+        asset,
         ScriptTransfer(i.caller, 1, assetId)
       ]
-   }
+    }
 }
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+
         
