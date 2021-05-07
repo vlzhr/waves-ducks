@@ -42,6 +42,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "open"),
+      StringEntry("auction_" + assetId.toBase58String() + "_last", auctionId),
       StringEntry("auction_" + auctionId + "_assetGen", asset),
       StringEntry("auction_" + auctionId + "_assetId", assetId.toBase58String()),
       IntegerEntry("auction_" + auctionId + "_startedAt", lastBlock.timestamp),
