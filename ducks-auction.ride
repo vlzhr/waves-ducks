@@ -1,4 +1,3 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -42,6 +41,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "open"),
+      StringEntry("auction_" + assetId.toBase58String() + "_last", auctionId),
       StringEntry("auction_" + auctionId + "_assetGen", asset),
       StringEntry("auction_" + auctionId + "_assetId", assetId.toBase58String()),
       IntegerEntry("auction_" + auctionId + "_startedAt", lastBlock.timestamp),
@@ -90,7 +90,7 @@ func instantBuy(auctionId: String) = {
           StringEntry("auction_" + auctionId + "_status", "finished"),
           IntegerEntry("auction_" + auctionId + "_finalPrice", amount),
           ScriptTransfer(addressFromStringValue(auctionOwner), amount, unit),
-          ScriptTransfer(i.caller, 1, this.getBinary("auction_" + auctionId + "_assetId"))
+          ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String())
         ]
       }
     }
@@ -102,12 +102,14 @@ func placeBid(auctionId: String) = {
   let pmt = i.payments[0].value()
   let amount = pmt.amount
   let bidId = i.transactionId.toBase58String()
+  let assetId = this.getStringValue("auction_" + auctionId + "_assetId")
 
   if (pmt.assetId != unit) then {
     throw("Auction does only support WAVES payments")
   } else {
       [
         StringEntry("auction_" + auctionId + "_bid_" + bidId + "_author", i.caller.toString()),
+        StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + amount.toString() + "\", \"status\": \"open\"}"),
         IntegerEntry("auction_" + auctionId + "_bid_" + bidId + "_amount", amount),
         StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "open")
       ]
@@ -116,8 +118,8 @@ func placeBid(auctionId: String) = {
 
 @Callable(i)
 func cancelBid(auctionId: String, bidId: String) = {
-  let pmt = i.payments[0].value()
-  let amount = pmt.amount
+
+  let assetId = this.getStringValue("auction_" + auctionId + "_assetId")
 
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
   let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
@@ -126,6 +128,7 @@ func cancelBid(auctionId: String, bidId: String) = {
     throw("Only allowed to the bid author")
   } else {
     [
+      StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"cancelled\"}"),
       StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "cancelled"),
       ScriptTransfer(i.caller, bidAmount, unit)
     ]
@@ -150,6 +153,7 @@ func acceptBid(auctionId: String, bidId: String) = {
       let newRecordPrice = max([recordPrice, bidAmount])
       [
         StringEntry("auction_" + auctionId + "_status", "finished"),
+        StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"finished\"}"),
         IntegerEntry("auction_" + auctionId + "_finalPrice", bidAmount),
         IntegerEntry(assetId + "_recordPrice", newRecordPrice),
         StringEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT", ""),
@@ -163,4 +167,3 @@ func acceptBid(auctionId: String, bidId: String) = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-        
