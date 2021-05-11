@@ -1,4 +1,3 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -122,9 +121,14 @@ func startDuckBreeding() = {
     } else {
      [
       StringEntry(getDuckParentKey(i.transactionId, 1), firstAssetId),
+      IntegerEntry("asset_" + firstAssetId + "_children", 1),
+      IntegerEntry("asset_" + secondAssetId + "_children", 1),
+      StringEntry("account_" + i.caller.toString() + "_tx_" + i.transactionId.toBase58String(), "started"),
       StringEntry(getDuckParentKey(i.transactionId, 2), secondAssetId),
       StringEntry(getProcessStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
-      IntegerEntry(getProcessFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching)
+      IntegerEntry(getProcessFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
+      ScriptTransfer(i.caller, 1, firstAssetId.fromBase58String()),
+      ScriptTransfer(i.caller, 1, secondAssetId.fromBase58String())
      ]
     }
   }
@@ -155,23 +159,20 @@ func finishDuckHatching(txIdStr: String) = {
       let assetId = asset.calculateAssetId()
 
       let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
-      let parent1Id = tryGetString(getDuckParentKey(txId, 1))
-      let parent2Id = tryGetString(getDuckParentKey(txId, 2))
 
       [
         StringEntry(processStatusKey, HatchingFinished),
         StringEntry(duckIdKey, assetId.toBase58String()),
+        StringEntry("account_" + i.caller.toString() + "_tx_" + i.transactionId.toBase58String(), "finished"),
         StringEntry(assetId.toBase58String(), duckIdKey),
         IntegerEntry(getDuckStatsKey(duckGen), amount),
-        IntegerEntry("asset_" + parent1Id + "_children", 1),
-        IntegerEntry("asset_" + parent2Id + "_children", 1),
         asset,
-        ScriptTransfer(i.caller, 1, assetId),
-        ScriptTransfer(i.caller, 1, parent1Id.fromBase58String()),
-        ScriptTransfer(i.caller, 1, parent2Id.fromBase58String())
+        ScriptTransfer(i.caller, 1, assetId)
       ]
     }
 }
+
+#culture lawn ticket empower recall dinosaur verify remember actor permit unaware trim tree castle upset
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
