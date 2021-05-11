@@ -3,6 +3,7 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
+let breederAddress = base58'3P7C5CUc6XzpJqmDaeUNZ1by1XSCyA2VKnv'
 
 func tryGetInteger(key: String) = {
     let val = match getInteger(this, key) {
@@ -21,11 +22,23 @@ func tryGetString(key: String) = {
 }
 
 func getAssetGenotype(assetId: ByteVector) = {
-  let asset = match getString(Address(incubatorAddress), assetId.toBase58String()) {
+  let asset1 = match getString(Address(incubatorAddress), assetId.toBase58String()) {
         case b:String => b
         case _ => ""
     }
-  asset
+  if (asset1 != "") then {
+    asset1
+  } else {
+    let asset2 = match getString(Address(breederAddress), assetId.toBase58String()) {
+      case c:String => c
+      case _ => ""
+    }
+    if (asset2 != "") then {
+      asset2
+    } else {
+      ""
+    }
+  }
 }
 
 @Callable(i)
