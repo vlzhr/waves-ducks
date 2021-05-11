@@ -39,14 +39,14 @@ func tryGetInteger(key: String) = {
     val
 }
 
-func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int) = {
+func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight).value()
-  (randomSeedBlock.vrf.value() + txId).toInt(10) % variants
+  (txId + randomSeedBlock.vrf.value()).toInt(offset) % variants
 }
 
 func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
-  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight)
-  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight)
+  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight, 10)
+  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 11)
   let color = if (colorRandom == 0) then "Y"
     else if (colorRandom == 1) then "G" 
     else if (colorRandom == 2) then "B" 
