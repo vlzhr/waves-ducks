@@ -1,4 +1,3 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -58,7 +57,7 @@ func determineGeneration(g1: String, g2: String) = {
 }
 
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
-  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight).value()
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
   (txId + randomSeedBlock.vrf.value()).toInt(offset) % variants
 }
 
