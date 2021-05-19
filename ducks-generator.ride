@@ -5,6 +5,8 @@
 let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
 let eggsNeededAmount = 10_00  # 10 EGGs
 let delayForHatching = 2
+let discountCoefficient = 1
+let typesAmount = 2
 
 let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
@@ -54,20 +56,31 @@ func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
 
   if (typeRandom == 0) then "DUCK-AAAAAAAA-G" + color
     else "DUCK-BBBBBBBB-G" + color
-  
 }
 
+func countEggsNeededAmount(totalDucksAmount: Int) = {
+  let n = totalDucksAmount
+  let g = discountCoefficient
+  let t = typesAmount
+  let price = pow((100 + n*g/t), 2, 5, 1, 2, DOWN)
+  price
+}
 
 @Callable(i)
 func startDuckHatching() = {
 
+  let totalDucksAmount = tryGetInteger("ducks_amount")
+  let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
   let firstPayment = i.payments[0].value()
   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
-   else if (firstPayment.amount != eggsNeededAmount)  then throw("You can attach only EXACTLY 10 EGG tokens ")
+   else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGs: " + eggsNeeded.toString())
    else {
      [
       StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
-      IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching)
+      IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      ScriptTransfer(i.caller, firstPayment.amount - eggsNeeded, eggsAssetId)
      ]
   }
 }
