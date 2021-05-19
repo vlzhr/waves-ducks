@@ -109,7 +109,7 @@ func checkAssetInIncubator(assetId: String) = {
 
 
 @Callable(i)
-func startDuckBreeding() = {
+func startDuckHatching() = {
 
   let firstAssetId = i.payments[0].value().assetId.value().toBase58String()
   let secondAssetId = i.payments[1].value().assetId.value().toBase58String()
