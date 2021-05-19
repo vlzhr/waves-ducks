@@ -40,12 +40,13 @@ func tryGetInteger(key: String) = {
 
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
-  (txId + randomSeedBlock.vrf.value()).toInt(offset) % variants
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset*8) % variants
 }
 
 func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
-  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight, 10)
-  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 11)
+  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight, 0)
+  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 1)
   let color = if (colorRandom == 0) then "Y"
     else if (colorRandom == 1) then "G" 
     else if (colorRandom == 2) then "B" 
