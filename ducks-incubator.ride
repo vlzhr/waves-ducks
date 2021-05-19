@@ -79,7 +79,7 @@ func startDuckHatching() = {
       StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
       IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
       IntegerEntry("ducks_amount", totalDucksAmount + 1),
-      IntegerEntry("ducks_last_price", eggsNeeded)
+      IntegerEntry("ducks_last_price", eggsNeeded),
       ScriptTransfer(i.caller, firstPayment.amount - eggsNeeded, eggsAssetId)
      ]
   }

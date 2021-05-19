@@ -132,7 +132,7 @@ func startDuckBreeding() = {
 
 
 @Callable(i)
-func finishDuckHatching(txIdStr: String) = {
+func finishDuckBreeding(txIdStr: String) = {
 
   let txId = fromBase58String(txIdStr)
   let processStatusKey = getProcessStatusKey(i.caller.toString(), txId)
@@ -144,7 +144,7 @@ func finishDuckHatching(txIdStr: String) = {
   
   if (processTxStatus == HatchingFinished) then {
     let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
-    throw("The duck was breeded and claimed already, here is the folowing: " + duckId)
+    throw("The duck was breeded and claimed already, here is the following: " + duckId)
   } else 
     if (processFinishHeight > height) then throw("Breeding is not finished yet " + (processFinishHeight - height).toString() + " blocks remaining, it will take around " +  (processFinishHeight - height).toString() + " minutes")
     else {
