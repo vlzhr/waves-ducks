@@ -2,7 +2,7 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let delayForHatching = 0
+let delayForHatching = 2
 
 let HatchingStarted = "BREEDING_STARTED"
 let HatchingFinished = "BREEDING_FINISHED"
@@ -58,7 +58,8 @@ func determineGeneration(g1: String, g2: String) = {
 
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
-  (txId + randomSeedBlock.vrf.value()).toInt(offset) % variants
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset) % variants
 }
 
 func getRandomGen(gen1: String, gen2: String, step: Int, txId: ByteVector, hatchingFinishHeight: Int) = {
