@@ -3,7 +3,6 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
-let eggsNeededAmount = 10_00  # 10 EGGs
 let delayForHatching = 2
 let discountCoefficient = 1
 let typesAmount = 2
@@ -74,12 +73,13 @@ func startDuckHatching() = {
 
   let firstPayment = i.payments[0].value()
   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
-   else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGs: " + eggsNeeded.toString())
+   else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGlets: " + eggsNeeded.toString())
    else {
      [
       StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
       IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
       IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded)
       ScriptTransfer(i.caller, firstPayment.amount - eggsNeeded, eggsAssetId)
      ]
   }
