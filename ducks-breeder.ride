@@ -9,6 +9,7 @@ let HatchingFinished = "BREEDING_FINISHED"
 
 let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
 
+let MaxGeneration = 2
 let Generations = ["G", "H", "I", "K", "L"]
 
 func getProcessStatusKey(address: String, txId: ByteVector) = {
@@ -94,7 +95,6 @@ func generateDuck(txId: ByteVector, hatchingFinishHeight: Int) = {
     gen
 }
 
-
 func checkAssetInIncubator(assetId: String) = {
   let result = match getString(Address(incubatorAddress), assetId) {
     case b:String => true
@@ -107,32 +107,47 @@ func checkAssetInIncubator(assetId: String) = {
   result || result2
 }
 
+func canBeBreeded(asset1Id: ByteVector, asset2Id: ByteVector) = {
+  let asset1Gen = assetInfo(asset1Id).value().name.split("")
+  let asset2Gen = assetInfo(asset2Id).value().name.split("")
+
+  if (Generations.indexOf(asset1Gen[14]).value() >= MaxGeneration || Generations.indexOf(asset2Gen[14]).value() >= MaxGeneration) then {
+    "you can only breed ducks with generation " + Generations[MaxGeneration] + " and lower"
+  } else {
+    "true"
+  }
+}
 
 @Callable(i)
-func startDuckHatching() = {
+func startDuckBreeding() = {
 
   let firstAssetId = i.payments[0].value().assetId.value().toBase58String()
   let secondAssetId = i.payments[1].value().assetId.value().toBase58String()
 
   if (!(checkAssetInIncubator(firstAssetId) && checkAssetInIncubator(secondAssetId))) then {
-    throw("You need to attach 2 NFT-ducks.")
+    throw("You need to attach 2 valid NFT-ducks.")
   } else {
     if (tryGetInteger("asset_" + firstAssetId + "_children") > 0 || tryGetInteger("asset_" + secondAssetId + "_children") > 0) then {
       throw("One duck can be used for breeding only once in its lifetime.")
     } else {
-     [
-      StringEntry(getDuckParentKey(i.transactionId, 1), firstAssetId),
-      StringEntry(getDuckParentKey(i.transactionId, 2), secondAssetId),
-      StringEntry(getProcessStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
-      IntegerEntry(getProcessFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching)
-     ]
+      let breededStatus = canBeBreeded(firstAssetId.fromBase58String(), firstAssetId.fromBase58String())
+      if (breededStatus != "true") then {
+        throw("These ducks cannot be breeded: " + breededStatus)
+      } else {
+        [
+          StringEntry(getDuckParentKey(i.transactionId, 1), firstAssetId),
+          StringEntry(getDuckParentKey(i.transactionId, 2), secondAssetId),
+          StringEntry(getProcessStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
+          IntegerEntry(getProcessFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching)
+        ]
+      }
     }
   }
 }
 
 
 @Callable(i)
-func finishDuckBreeding(txIdStr: String) = {
+func finishDuckHatching(txIdStr: String) = {
 
   let txId = fromBase58String(txIdStr)
   let processStatusKey = getProcessStatusKey(i.caller.toString(), txId)
@@ -144,7 +159,7 @@ func finishDuckBreeding(txIdStr: String) = {
   
   if (processTxStatus == HatchingFinished) then {
     let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
-    throw("The duck was breeded and claimed already, here is the following: " + duckId)
+    throw("The duck was breeded and claimed already, here is the folowing: " + duckId)
   } else 
     if (processFinishHeight > height) then throw("Breeding is not finished yet " + (processFinishHeight - height).toString() + " blocks remaining, it will take around " +  (processFinishHeight - height).toString() + " minutes")
     else {
@@ -175,4 +190,3 @@ func finishDuckBreeding(txIdStr: String) = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-        
