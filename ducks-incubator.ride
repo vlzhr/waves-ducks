@@ -2,10 +2,10 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
 let delayForHatching = 2
-let discountCoefficient = 1
-let typesAmount = 2
+let discountCoefficient = 10
+let typesAmount = 4
 
 let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
@@ -45,23 +45,34 @@ func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int,
   randomHash.toInt(offset*8) % variants
 }
 
-func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
-  let typeRandom = getRandomNumber(2, txId, hatchingFinishHeight, 0)
-  let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 1)
-  let color = if (colorRandom == 0) then "Y"
-    else if (colorRandom == 1) then "G" 
-    else if (colorRandom == 2) then "B" 
-    else "R"
+func wasUniqueBorn(gen: String) = {
+  tryGetInteger(getDuckStatsKey(gen))
+}
 
-  if (typeRandom == 0) then "DUCK-AAAAAAAA-G" + color
-    else "DUCK-BBBBBBBB-G" + color
+func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
+  let jackpotRandom = getRandomNumber(500, txId, hatchingFinishHeight, 0)
+  if (jackpotRandom == 1 && wasUniqueBorn("DUCK-WWWWWWWW-JU") == 0) then {
+    "DUCK-WWWWWWWW-JU"
+  } else {
+    let typeRandom = getRandomNumber(typesAmount, txId, hatchingFinishHeight, 0)
+    let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 1)
+    let color = if (colorRandom == 0) then "Y"
+      else if (colorRandom == 1) then "G" 
+      else if (colorRandom == 2) then "B" 
+      else "R"
+
+    if (typeRandom == 0) then "DUCK-AAAAAAAA-G" + color
+      else if (typeRandom == 1) then "DUCK-BBBBBBBB-G" + color
+      else if (typeRandom == 2) then "DUCK-CCCCCCCC-G" + color
+      else "DUCK-DDDDDDDD-G" + color
+    }
 }
 
 func countEggsNeededAmount(totalDucksAmount: Int) = {
   let n = totalDucksAmount
   let g = discountCoefficient
   let t = typesAmount
-  let price = pow((100 + n*g/t), 2, 5, 1, 2, DOWN)
+  let price = pow((100 + (n*g)/(10*t)), 2, 5, 1, 2, DOWN)
   price
 }
 
