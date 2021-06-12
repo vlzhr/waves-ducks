@@ -50,7 +50,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
   let asset = getAssetGenotype(assetId)
 
   if (asset == "") then {
-    throw("You can only sell an NFT-duck created in incubator")
+    throw("You can only sell an NFT-duck created in incubator or breeder")
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "open"),
@@ -75,7 +75,7 @@ func cancelAuction(auctionId: String) = {
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "cancelled"),
-      StringEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT", ""),
+      DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
       ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String())
     ]
   }
@@ -85,6 +85,8 @@ func cancelAuction(auctionId: String) = {
 func instantBuy(auctionId: String) = {
   let pmt = i.payments[0].value()
   let amount = pmt.amount
+  let assetId = tryGetString("auction_" + auctionId + "_assetId")
+  let bidId = i.transactionId.toBase58String()
 
   let auctionStatus = tryGetString("auction_" + auctionId + "_status")
 
@@ -99,10 +101,17 @@ func instantBuy(auctionId: String) = {
         throw("For instant purchase you need to pay at least " + instantPrice.toString())
       } else {
         let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
+        let recordPrice = tryGetInteger(assetId+"_recordPrice")
+        let newRecordPrice = max([recordPrice, amount])
+
         [
           StringEntry("auction_" + auctionId + "_status", "finished"),
           IntegerEntry("auction_" + auctionId + "_finalPrice", amount),
+          IntegerEntry(assetId + "_recordPrice", newRecordPrice),
+          StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + amount.toString() + "\", \"status\": \"finished\"}"),
+          DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
           ScriptTransfer(addressFromStringValue(auctionOwner), amount, unit),
+          StringEntry("address_" + i.caller.toString() + "_auction_" + auctionId + "_bid_" + bidId, "closed"),
           ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String())
         ]
       }
@@ -120,12 +129,18 @@ func placeBid(auctionId: String) = {
   if (pmt.assetId != unit) then {
     throw("Auction does only support WAVES payments")
   } else {
+    let minPrice = tryGetInteger("auction_" + auctionId + "_startPrice")
+    if (minPrice > amount) then {
+      throw("The minimal initial price is set as " + minPrice.toString())
+    } else {
       [
         StringEntry("auction_" + auctionId + "_bid_" + bidId + "_author", i.caller.toString()),
         StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + amount.toString() + "\", \"status\": \"open\"}"),
         IntegerEntry("auction_" + auctionId + "_bid_" + bidId + "_amount", amount),
+        StringEntry("address_" + i.caller.toString() + "_auction_" + auctionId + "_bid_" + bidId, "open"),
         StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "open")
-      ]
+      ]    
+    }
   }
 }
 
@@ -143,6 +158,7 @@ func cancelBid(auctionId: String, bidId: String) = {
     [
       StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"cancelled\"}"),
       StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "cancelled"),
+      StringEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId, "closed"),
       ScriptTransfer(i.caller, bidAmount, unit)
     ]
   }
@@ -166,10 +182,11 @@ func acceptBid(auctionId: String, bidId: String) = {
       let newRecordPrice = max([recordPrice, bidAmount])
       [
         StringEntry("auction_" + auctionId + "_status", "finished"),
+        StringEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId, "closed"),
         StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"finished\"}"),
         IntegerEntry("auction_" + auctionId + "_finalPrice", bidAmount),
         IntegerEntry(assetId + "_recordPrice", newRecordPrice),
-        StringEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT", ""),
+        DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
         ScriptTransfer(i.caller, bidAmount, unit),
         ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
       ]
