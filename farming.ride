@@ -1,0 +1,181 @@
+
+{-# STDLIB_VERSION 4 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
+let perchPrice = 100
+let scale = 10000
+
+let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
+let breederAddress = base58'3P7C5CUc6XzpJqmDaeUNZ1by1XSCyA2VKnv'
+
+let GENS = ["A", "B", "C", "D", "E", "F", "G"]
+
+func getRewardPerBlock() = {
+  7 # 0.07 EGGs per block
+}
+
+func tryGetInteger(key: String) = {
+    match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+}
+
+func tryGetString(key: String) = {
+    match getString(this, key) {
+        case a:String => a
+        case _ => ""
+    }
+}
+
+func handleGen(accumulated: String, gen: String) = {
+  let i = match GENS.indexOf(gen) {
+    case x:Int => x
+    case _ => 0
+  } 
+  accumulated.take(i) + toString(parseIntValue(accumulated.split("")[i]) + 1) + accumulated.takeRight(8-1-i)
+}
+
+func handleAmounts(accumulated: String, amount: String) = {
+  let i = accumulated.size() / 2
+  if (amount.parseIntValue() > 0) then { accumulated + GENS[i] + amount } else "--"
+}
+
+func handleDirtyAmounts(accumulated: String, sym: String) = {
+  if (sym != "-") then {accumulated + sym} else {accumulated}
+}
+
+func getGen(assetName: String) = {
+  # getGen(["A","A","B","A","D","C","B"])
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  let genAmounts = FOLD<8>(genotype, "00000000", handleGen)
+  let dirtyGen = FOLD<8>(genAmounts.split(""), "", handleAmounts)
+  FOLD<8>(dirtyGen.split(""), "", handleDirtyAmounts)
+}
+
+func getAssetOrigin(generation: String) = {
+  if (generation == "G") then {incubatorAddress} else {breederAddress}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  pow(quantity, 0, 5, 1, 2, HALFDOWN)
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  let assetName = assetInfo(assetId).value().name
+  let generation = assetName.split("")[14]
+  let gen = getGen(assetName) + "-" + generation
+  100
+}
+
+func getLastKnownFarmingPower(assetId: ByteVector) = {
+  100
+}
+
+func getAssetsByGen(gen: String) = {
+  let s = tryGetString("assets_"+gen)
+  if (s == "") then {[]} else {s.split(",")}
+}
+
+func calcInterest(previousInterest: Int, previousInterestHeight: Int, totalFarmingPower: Int) = {
+  # interest = amount of EGGlets you would earn if staked 1 percent of farming power since the very first block of farming
+  previousInterest + scale * getRewardPerBlock() * (height-previousInterestHeight) / totalFarmingPower
+}
+
+func getCurrentInterest() = {
+  if (tryGetInteger("total_farmingPower") > 0) then {
+    let previousInterest = tryGetInteger("total_lastCheckInterest")
+    let previousInterestHeight = tryGetInteger("total_lastCheckInterestHeight")
+    let totalFarmingPower = tryGetInteger("total_farmingPower")
+
+    calcInterest(previousInterest, previousInterestHeight, totalFarmingPower)
+  } else if (tryGetInteger("total_startHeight") <= height) then { 0 } else { throw("farming is not launched, yet") }
+}
+
+
+func calcAssetRewardDelta(address: String, assetId: String) = {
+  let lastCheckUserInterest = tryGetInteger("address_"+address+"_asset_"+assetId+"_lastCheckInterest")
+  let userFarmingPower = tryGetInteger("address_"+address+"_asset_"+assetId+"_farmingPower")
+  let currentInterest = getCurrentInterest()
+
+  userFarmingPower * (currentInterest - lastCheckUserInterest)
+}
+
+
+func getCheckDataChanges(address: String, assetId: ByteVector, rewardDelta: Int, assetFarmingPowerDelta: Int) = {
+  let asset = assetId.toBase58String()
+  [
+    IntegerEntry("total_farmingPower", tryGetInteger("total_farmingPower") + assetFarmingPowerDelta),
+    IntegerEntry("total_lastCheckInterest", getCurrentInterest()),
+    IntegerEntry("total_lastCheckInterestHeight", height),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_farmingPower", tryGetInteger("address_"+address+"_asset_"+asset+"_farmingPower") + assetFarmingPowerDelta),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_lastCheckInterest", getCurrentInterest()),
+
+    IntegerEntry("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount") + rewardDelta)
+  ]
+}
+
+@Callable(i)
+func init() = {
+  if (i.caller != this) then {
+    throw("admin only")
+  } else {
+    [
+      IntegerEntry("total_startHeight", height)
+    ]
+  }
+}
+
+@Callable(i)
+func stakeNFT() = {
+  let assetId = i.payments[0].value().assetId.value()
+  let address = i.caller.toString()
+
+  let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String())
+
+  getCheckDataChanges(address, assetId, assetRewardDelta, getAssetFarmingPower(assetId))
+}
+
+@Callable(i)
+func unstakeNFT(asset: String) = {
+  let assetId = asset.fromBase58String()
+  let address = i.caller.toString()
+
+  let assetRewardDelta = calcAssetRewardDelta(address, asset)
+
+  let return = getCheckDataChanges(address, assetId, assetRewardDelta, -getAssetFarmingPower(assetId))
+  return ++ [
+    ScriptTransfer(i.caller, 100, assetId)
+  ]
+}
+
+@Callable(i)
+func checkNFT(asset: String) = {
+  let assetRewardDelta = calcAssetRewardDelta(i.caller.toString(), asset)
+  getCheckDataChanges(i.caller.toString(), asset.fromBase58String(), assetRewardDelta, 0)
+}
+
+@Callable(i)
+func claimReward(asset: String) = {
+  let address = i.caller.toString()
+  let farmedAmount = calcAssetRewardDelta(address, asset) + tryGetInteger("address_"+address+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / scale
+
+  if (reward <= 0) then {
+    throw("you have no EGGs to withdraw")
+  } else {
+    [
+      IntegerEntry("address_"+address+"_withdrawnAmount", farmedAmount),
+      ScriptTransfer(i.caller, reward, eggsAssetId)
+    ]
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
