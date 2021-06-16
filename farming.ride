@@ -1,4 +1,3 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -7,13 +6,13 @@ let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
 let perchPrice = 100
 let scale = 10000
 
-let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
-let breederAddress = base58'3P7C5CUc6XzpJqmDaeUNZ1by1XSCyA2VKnv'
+let incubatorAddress = base58'3P6TwNU39Ykkbeqhn5TE4a2736xsA1vXemM'
+let breederAddress = base58'3P9REuLBnYBafDqtEu6hfzs2Rv2haSU158y'
 
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 
 func getRewardPerBlock() = {
-  7 # 0.07 EGGs per block
+  684 # 0.0684 EGGs per block
 }
 
 func tryGetInteger(key: String) = {
@@ -30,29 +29,25 @@ func tryGetString(key: String) = {
     }
 }
 
-func handleGen(accumulated: String, gen: String) = {
-  let i = match GENS.indexOf(gen) {
-    case x:Int => x
-    case _ => 0
-  } 
-  accumulated.take(i) + toString(parseIntValue(accumulated.split("")[i]) + 1) + accumulated.takeRight(8-1-i)
-}
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
 
-func handleAmounts(accumulated: String, amount: String) = {
-  let i = accumulated.size() / 2
-  if (amount.parseIntValue() > 0) then { accumulated + GENS[i] + amount } else "--"
-}
-
-func handleDirtyAmounts(accumulated: String, sym: String) = {
-  if (sym != "-") then {accumulated + sym} else {accumulated}
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
 }
 
 func getGen(assetName: String) = {
-  # getGen(["A","A","B","A","D","C","B"])
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
   let genotype = assetName.drop(5).dropRight(3).split("")
-  let genAmounts = FOLD<8>(genotype, "00000000", handleGen)
-  let dirtyGen = FOLD<8>(genAmounts.split(""), "", handleAmounts)
-  FOLD<8>(dirtyGen.split(""), "", handleDirtyAmounts)
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
 }
 
 func getAssetOrigin(generation: String) = {
@@ -61,18 +56,18 @@ func getAssetOrigin(generation: String) = {
 
 func getAssetRarity(genotype: String, generation: String) = {
   let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
-  pow(quantity, 0, 5, 1, 2, HALFDOWN)
+  pow(100 / quantity, 2, 5, 1, 2, HALFDOWN)
 }
 
 func getAssetFarmingPower(assetId: ByteVector) = {
   let assetName = assetInfo(assetId).value().name
-  let generation = assetName.split("")[14]
+  let generation = assetName.takeRight(2).take(1)
   let gen = getGen(assetName) + "-" + generation
-  100
+  (gen, getAssetRarity(gen, generation))
 }
 
-func getLastKnownFarmingPower(assetId: ByteVector) = {
-  100
+func getLastKnownAssetFarmingPower(address: String, assetId: String) = {
+  tryGetInteger("address_"+address+"_asset_"+assetId+"_farmingPower")
 }
 
 func getAssetsByGen(gen: String) = {
@@ -96,16 +91,22 @@ func getCurrentInterest() = {
 }
 
 
-func calcAssetRewardDelta(address: String, assetId: String) = {
+func calcAssetRewardDelta(address: String, assetId: String, assetFarmingPower: Int) = {
   let lastCheckUserInterest = tryGetInteger("address_"+address+"_asset_"+assetId+"_lastCheckInterest")
-  let userFarmingPower = tryGetInteger("address_"+address+"_asset_"+assetId+"_farmingPower")
   let currentInterest = getCurrentInterest()
 
-  userFarmingPower * (currentInterest - lastCheckUserInterest)
+  assetFarmingPower * (currentInterest - lastCheckUserInterest)
+}
+
+
+func addAssetIdToGenEntry(assetId: String, assetGen: String) = {
+  let currentValue = tryGetString("assets_"+assetGen+"_locked")
+  if (currentValue == "") then {assetId} else {currentValue+","+assetId}
 }
 
 
 func getCheckDataChanges(address: String, assetId: ByteVector, rewardDelta: Int, assetFarmingPowerDelta: Int) = {
+  # called when staking/unstaking NFT or claiming reward
   let asset = assetId.toBase58String()
   [
     IntegerEntry("total_farmingPower", tryGetInteger("total_farmingPower") + assetFarmingPowerDelta),
@@ -118,14 +119,17 @@ func getCheckDataChanges(address: String, assetId: ByteVector, rewardDelta: Int,
   ]
 }
 
+func claimResult(address: String, asset: String, farmedAmount: Int) = {
+  [
+    IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", farmedAmount),
+    ScriptTransfer(Address(address.fromBase58String()), farmedAmount, eggsAssetId)
+  ]
+}
+
 @Callable(i)
 func init() = {
-  if (i.caller != this) then {
-    throw("admin only")
-  } else {
-    [
-      IntegerEntry("total_startHeight", height)
-    ]
+  if (i.caller != this) then { throw("admin only") } else {
+    [ IntegerEntry("total_startHeight", height) ]
   }
 }
 
@@ -134,9 +138,10 @@ func stakeNFT() = {
   let assetId = i.payments[0].value().assetId.value()
   let address = i.caller.toString()
 
-  let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String())
+  let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+  let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
 
-  getCheckDataChanges(address, assetId, assetRewardDelta, getAssetFarmingPower(assetId))
+  getCheckDataChanges(address, assetId, assetRewardDelta, assetFarmingPower)
 }
 
 @Callable(i)
@@ -144,33 +149,38 @@ func unstakeNFT(asset: String) = {
   let assetId = asset.fromBase58String()
   let address = i.caller.toString()
 
-  let assetRewardDelta = calcAssetRewardDelta(address, asset)
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
 
-  let return = getCheckDataChanges(address, assetId, assetRewardDelta, -getAssetFarmingPower(assetId))
-  return ++ [
-    ScriptTransfer(i.caller, 100, assetId)
+  let return = getCheckDataChanges(address, assetId, assetRewardDelta, -assetFarmingPower)
+
+  return ++ claimResult(address, asset, assetRewardDelta) ++ [
+    ScriptTransfer(i.caller, 1, assetId)
   ]
 }
 
-@Callable(i)
-func checkNFT(asset: String) = {
-  let assetRewardDelta = calcAssetRewardDelta(i.caller.toString(), asset)
-  getCheckDataChanges(i.caller.toString(), asset.fromBase58String(), assetRewardDelta, 0)
-}
+# @Callable(i)
+# func checkNFT(asset: String) = {
+#   let assetRewardDelta = calcAssetRewardDelta(i.caller.toString(), asset)
+#   getCheckDataChanges(i.caller.toString(), asset.fromBase58String(), assetRewardDelta, 0, "")
+# }
 
 @Callable(i)
 func claimReward(asset: String) = {
   let address = i.caller.toString()
-  let farmedAmount = calcAssetRewardDelta(address, asset) + tryGetInteger("address_"+address+"_lastCheckFarmedAmount")
-  let withdrawnAmount = tryGetInteger("address_"+address+"_withdrawnAmount")
+  let assetId = asset.fromBase58String()
 
-  let reward = (farmedAmount - withdrawnAmount) / scale
+  let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+  let farmedAmount = calcAssetRewardDelta(address, asset, assetFarmingPower) + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
 
   if (reward <= 0) then {
     throw("you have no EGGs to withdraw")
   } else {
     [
-      IntegerEntry("address_"+address+"_withdrawnAmount", farmedAmount),
+      IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", farmedAmount),
       ScriptTransfer(i.caller, reward, eggsAssetId)
     ]
   }
