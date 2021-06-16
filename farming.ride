@@ -1,3 +1,4 @@
+
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -134,14 +135,41 @@ func init() = {
 }
 
 @Callable(i)
+func buyPerch(color: String) = {
+  if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+    throw("you need to set color properly")
+  } else {
+    let firstPayment = i.payments[0].value()
+    if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+    else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
+    else {
+      let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
+      let perchAmount = tryGetInteger(perchAmountKey)
+      [
+        IntegerEntry(perchAmountKey, perchAmount + 1)
+      ]
+    }
+  }
+}
+
+@Callable(i)
 func stakeNFT() = {
   let assetId = i.payments[0].value().assetId.value()
   let address = i.caller.toString()
 
-  let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
-  let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
+  let color = assetInfo(assetId).value().name.takeRight(1)
+  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
 
-  getCheckDataChanges(address, assetId, assetRewardDelta, assetFarmingPower)
+  if (availablePerches <= 0) then {
+    throw("no perches available for the color " + color)
+  } else {
+    let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+    let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
+
+    getCheckDataChanges(address, assetId, assetRewardDelta, assetFarmingPower) ++ [
+      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1)
+    ]
+  }  
 }
 
 @Callable(i)
@@ -152,9 +180,16 @@ func unstakeNFT(asset: String) = {
   let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
   let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
 
-  let return = getCheckDataChanges(address, assetId, assetRewardDelta, -assetFarmingPower)
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
 
-  return ++ claimResult(address, asset, assetRewardDelta) ++ [
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+  let color = assetInfo(assetId).value().name.takeRight(1)
+  let result = getCheckDataChanges(address, assetId, assetRewardDelta, -assetFarmingPower)
+
+  result ++ claimResult(address, asset, reward) ++ [
+    IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
     ScriptTransfer(i.caller, 1, assetId)
   ]
 }
@@ -171,7 +206,8 @@ func claimReward(asset: String) = {
   let assetId = asset.fromBase58String()
 
   let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
-  let farmedAmount = calcAssetRewardDelta(address, asset, assetFarmingPower) + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let rewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+  let farmedAmount = rewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
   let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
 
   let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
@@ -179,10 +215,7 @@ func claimReward(asset: String) = {
   if (reward <= 0) then {
     throw("you have no EGGs to withdraw")
   } else {
-    [
-      IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", farmedAmount),
-      ScriptTransfer(i.caller, reward, eggsAssetId)
-    ]
+    claimResult(asset, address, farmedAmount)
   }
 }
 
