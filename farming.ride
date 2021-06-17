@@ -1,4 +1,3 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -131,14 +130,6 @@ func getUnstakeResult(address: String, assetId: ByteVector, rewardDelta: Int, wi
   ]
 }
 
-
-# func claimResult(address: String, asset: String, farmedAmount: Int) = {
-#   [
-#     IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", farmedAmount),
-#     ScriptTransfer(Address(address.fromBase58String()), farmedAmount, eggsAssetId)
-#   ]
-# }
-
 @Callable(i)
 func init() = {
   if (i.caller != this) then { throw("admin only") } else {
@@ -208,24 +199,28 @@ func unstakeNFT(asset: String) = {
 }
 
 
-# @Callable(i)
-# func claimReward(asset: String) = {
-#   let address = i.caller.toString()
-#   let assetId = asset.fromBase58String()
+@Callable(i)
+func claimReward(asset: String) = {
+  let address = i.caller.toString()
+  let assetId = asset.fromBase58String()
 
-#   let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
-#   let rewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
-#   let farmedAmount = rewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
-#   let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+  
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
 
-#   let reward = (farmedAmount - withdrawnAmount * scale2) / (scale)
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
 
-#   if (reward <= 0) then {
-#     throw("you have no EGGs to withdraw")
-#   } else {
-#     claimResult(asset, address, farmedAmount)
-#   }
-# }
+  if (reward <= 0) then {
+    throw("you have no EGGs to withdraw")
+  } else {
+    [
+      IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount") + reward * scale2),
+      ScriptTransfer(Address(address.fromBase58String()), reward, eggsAssetId)
+    ]
+  }
+}
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
