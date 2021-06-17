@@ -1,3 +1,4 @@
+
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -198,6 +199,44 @@ func unstakeNFT(asset: String) = {
   ]
 }
 
+@Callable(i)
+func stakeJackpot(color: String) = {
+  let assetId = i.payments[0].value().assetId.value()
+  let address = i.caller.toString()
+  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
+
+  if (availablePerches <= 0) then {
+    throw("no perches available for the color " + color)
+  } else {
+    let assetFarmingPower = 100
+    getStakeResult(address, assetId, assetFarmingPower) ++ [
+      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
+      StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
+    ]
+  }
+}
+
+@Callable(i)
+func unstakeJackpot(asset: String) = {
+  let assetId = asset.fromBase58String()
+  let address = i.caller.toString()
+
+  let color = tryGetString("address_"+address+"_asset_"+asset+"_perchColor")
+
+  let assetFarmingPower = 100
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+  let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+  result ++ [
+    IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+    ScriptTransfer(i.caller, reward, eggsAssetId),
+    ScriptTransfer(i.caller, 1, assetId)
+  ]
+}
 
 @Callable(i)
 func claimReward(asset: String) = {
