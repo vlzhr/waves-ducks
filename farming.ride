@@ -1,15 +1,14 @@
-
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
 let perchPrice = 100
 let scale = 10000
 let scale2 = 1000000
 
-let incubatorAddress = base58'3P6TwNU39Ykkbeqhn5TE4a2736xsA1vXemM'
-let breederAddress = base58'3P9REuLBnYBafDqtEu6hfzs2Rv2haSU158y'
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
 
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 
@@ -58,7 +57,8 @@ func getAssetOrigin(generation: String) = {
 
 func getAssetRarity(genotype: String, generation: String) = {
   let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
-  pow(100 / quantity, 2, 5, 1, 2, HALFDOWN)
+  let power = pow(10000 / quantity, 4, 5, 1, 2, HALFDOWN)
+  if (power > 0) then {power} else {2}
 }
 
 func getAssetFarmingPower(assetId: ByteVector) = {
@@ -190,13 +190,18 @@ func unstakeNFT(asset: String) = {
   let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
 
   let color = assetInfo(assetId).value().name.takeRight(1)
+  if (color == "U") then {
+    throw("use another function to unstake Jackpot NFT")
+  } else {
 
-  let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
-  result ++ [
-    IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
-    ScriptTransfer(i.caller, reward, eggsAssetId),
-    ScriptTransfer(i.caller, 1, assetId)
-  ]
+    let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+    result ++ [
+      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+      ScriptTransfer(i.caller, reward, eggsAssetId),
+      ScriptTransfer(i.caller, 1, assetId)
+    ]
+
+  }
 }
 
 @Callable(i)
@@ -205,14 +210,18 @@ func stakeJackpot(color: String) = {
   let address = i.caller.toString()
   let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
 
-  if (availablePerches <= 0) then {
-    throw("no perches available for the color " + color)
+  if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+    throw("jackpot only")
   } else {
-    let assetFarmingPower = 100
-    getStakeResult(address, assetId, assetFarmingPower) ++ [
-      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
-      StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
-    ]
+    if (availablePerches <= 0) then {
+      throw("no perches available for the color " + color)
+    } else {
+      let assetFarmingPower = 100
+      getStakeResult(address, assetId, assetFarmingPower) ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
+        StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
+      ]
+    }
   }
 }
 
@@ -223,19 +232,28 @@ func unstakeJackpot(asset: String) = {
 
   let color = tryGetString("address_"+address+"_asset_"+asset+"_perchColor")
 
-  let assetFarmingPower = 100
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+
   let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
   let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
   let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
 
   let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
 
-  let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
-  result ++ [
-    IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
-    ScriptTransfer(i.caller, reward, eggsAssetId),
-    ScriptTransfer(i.caller, 1, assetId)
-  ]
+  if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+    throw("jackpot only")
+  } else {
+    if (assetFarmingPower > 0) then {
+      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+      result ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+        ScriptTransfer(i.caller, reward, eggsAssetId),
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+    } else {
+      throw("")
+    }
+  }
 }
 
 @Callable(i)
