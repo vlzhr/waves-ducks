@@ -1,3 +1,4 @@
+
 {-# STDLIB_VERSION 4 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
@@ -218,19 +219,24 @@ func stakeJackpot(color: String) = {
   let address = i.caller.toString()
   let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
 
-  if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
-    throw("jackpot only")
-  } else {
-    if (availablePerches <= 0) then {
-      throw("no perches available for the color " + color)
+  let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+
+  if (assetFarmingPower > 0) then {
+    if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+      throw("jackpot only")
     } else {
-      let assetFarmingPower = 100
-      getStakeResult(address, assetId, assetFarmingPower) ++ [
-        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
-        StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
-      ]
+      if (availablePerches <= 0) then {
+        throw("no perches available for the color " + color)
+      } else {
+        getStakeResult(address, assetId, assetFarmingPower) ++ [
+          IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
+          StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
+        ]
+      }
     }
-  }
+  } else {
+      throw("asset is not valid")
+    }
 }
 
 @Callable(i)
