@@ -219,16 +219,16 @@ func stakeJackpot(color: String) = {
   let address = i.caller.toString()
   let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
 
-  let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+  let assetIssuer = assetInfo(assetId).value().issuer.bytes
 
-  if (assetFarmingPower > 0) then {
+  if (assetIssuer == incubatorAddress || assetIssuer == breederAddress) then {
     if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
       throw("jackpot only")
     } else {
       if (availablePerches <= 0) then {
         throw("no perches available for the color " + color)
       } else {
-        getStakeResult(address, assetId, assetFarmingPower) ++ [
+        getStakeResult(address, assetId, 100) ++ [
           IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
           StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
         ]
