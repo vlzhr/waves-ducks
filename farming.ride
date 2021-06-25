@@ -140,6 +140,7 @@ func init() = {
 
 @Callable(i)
 func buyPerch(color: String) = {
+  # throw("under maintence")
   if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
     throw("you need to set color properly")
   } else {
@@ -158,6 +159,7 @@ func buyPerch(color: String) = {
 
 @Callable(i)
 func stakeNFT() = {
+  # throw("under maintence")
   let assetId = i.payments[0].value().assetId.value()
   let address = i.caller.toString()
 
@@ -178,6 +180,7 @@ func stakeNFT() = {
 
 @Callable(i)
 func unstakeNFT(asset: String) = {
+  # throw("under maintence")
   let assetId = asset.fromBase58String()
   let address = i.caller.toString()
 
@@ -190,16 +193,21 @@ func unstakeNFT(asset: String) = {
   let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
 
   let color = assetInfo(assetId).value().name.takeRight(1)
-  if (color == "U") then {
-    throw("use another function to unstake Jackpot NFT")
+  if (assetFarmingPower <= 0) then {
+    throw("asset not available")
   } else {
+    if (color == "U") then {
+      throw("use another function to unstake Jackpot NFT")
+    } else {
 
-    let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
-    result ++ [
-      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
-      ScriptTransfer(i.caller, reward, eggsAssetId),
-      ScriptTransfer(i.caller, 1, assetId)
-    ]
+      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+      result ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+        ScriptTransfer(i.caller, reward, eggsAssetId),
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+
+    }
 
   }
 }
@@ -258,6 +266,7 @@ func unstakeJackpot(asset: String) = {
 
 @Callable(i)
 func claimReward(asset: String) = {
+  # throw("under maintence")
   let address = i.caller.toString()
   let assetId = asset.fromBase58String()
 
