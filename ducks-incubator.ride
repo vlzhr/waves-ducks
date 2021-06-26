@@ -1,15 +1,16 @@
-{-# STDLIB_VERSION 4 #-}
+{-# STDLIB_VERSION 5 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
-let delayForHatching = 2
+let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
+let delayForHatching = 0
 let discountCoefficient = 10
 let typesAmount = 6
 
+let refContractAddress = base58'3PGZyyPg7Mx91yaNT8k3MWxSQzuzusMUyzX'
+
 let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
-
 
 func getHatchingStatusKey(address: String, txId: ByteVector) = {
   # stores the fact of hatching, 
@@ -77,7 +78,7 @@ func countEggsNeededAmount(totalDucksAmount: Int) = {
 }
 
 @Callable(i)
-func startDuckHatching() = {
+func startDuckHatching(refKey: String) = {
 
   let totalDucksAmount = tryGetInteger("ducks_amount")
   let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
@@ -86,6 +87,9 @@ func startDuckHatching() = {
   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
    else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGlets: " + eggsNeeded.toString())
    else {
+      strict refCall = invoke(Address(refContractAddress), "addReferal" ,
+      [i.caller.toString(), refKey],[AttachedPayment(eggsAssetId,1)])
+
      [
       StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
       IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
@@ -136,3 +140,7 @@ func finishDuckHatching(txIdStr: String) = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+
+        
+
+        
