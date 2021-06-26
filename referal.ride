@@ -1,0 +1,60 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
+
+func tryGetInteger(key: String) = {
+    match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+}
+
+func tryGetString(key: String) = {
+    match getString(this, key) {
+        case a:String => a
+        case _ => ""
+    }
+}
+
+@Callable(i)
+func addRefKey(refererAddress: String, refKey: String) = {
+  if (i.caller != this) then {
+    throw("admin only")
+  } else {
+    [
+      StringEntry("key_" + refKey + "_refererAddress", refererAddress)
+    ]
+  }
+}
+
+@Callable(i)
+func addReferal(address: String, refKey: String) = {
+  if (refKey == "") then {
+    []
+  } else {
+    if (tryGetString("address_" + address + "_refKey") != "" || "address_" + address + "_refKey") != refKey) then {
+      throw("user does already have the referal key")
+    } else {
+      let referer = tryGetString("key_" + refKey + "_refererAddress")
+      if (referer == "") then {
+        throw("referal key not found")
+      } else {
+        let pmt = i.payments[0].value()
+        if (pmt.assetId != eggsAssetId) then {
+          throw("you need to attach EGG tokens")
+        } else {
+          [
+            StringEntry("address_" + address + "_refKey", refKey),
+            IntegerEntry("address_" + referer + "_availableReward", tryGetInteger("address_" + referer + "_availableReward") + pmt.amount)
+          ]
+        }
+      }
+    }
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
