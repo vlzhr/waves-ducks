@@ -7,10 +7,11 @@ let delayForHatching = 2
 let HatchingStarted = "BREEDING_STARTED"
 let HatchingFinished = "BREEDING_FINISHED"
 
-let incubatorAddress = base58'3PACKMArmh4BAEawStYmpcU62aiNTBJKvNh'
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 
-let MaxGeneration = 2
-let Generations = ["G", "H", "I", "K", "L"]
+let GENS = ["A", "B", "C", "D", "E", "F", "G"]
+let MaxGeneration = 5
+let Generations = ["G", "H", "I", "K", "L", "M", "N"]
 
 func getProcessStatusKey(address: String, txId: ByteVector) = {
   # stores the fact of hatching, 
@@ -59,7 +60,7 @@ func determineGeneration(g1: String, g2: String) = {
 
 func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
   let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
-  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  let randomHash = sha256_16Kb(txId + randomSeedBlock.vrf.value())
   randomHash.toInt(offset) % variants
 }
 
@@ -89,7 +90,7 @@ func generateDuck(txId: ByteVector, hatchingFinishHeight: Int) = {
             + getRandomGen(parent1Gen[8], parent2Gen[8], 3, txId, hatchingFinishHeight)
             + getRandomGen(parent1Gen[9], parent2Gen[9], 4, txId, hatchingFinishHeight)
             + getRandomGen(parent1Gen[10], parent2Gen[10], 5, txId, hatchingFinishHeight)
-            + getRandomGen(parent1Gen[11], parent2Gen[12], 6, txId, hatchingFinishHeight)
+            + getRandomGen(parent1Gen[11], parent2Gen[11], 6, txId, hatchingFinishHeight)
             + getRandomGen(parent1Gen[12], parent2Gen[12], 7, txId, hatchingFinishHeight)
             + "-" + determineGeneration(parent1Gen[14], parent2Gen[14]) + color
     gen
@@ -110,12 +111,38 @@ func checkAssetInIncubator(assetId: String) = {
 func canBeBreeded(asset1Id: ByteVector, asset2Id: ByteVector) = {
   let asset1Gen = assetInfo(asset1Id).value().name.split("")
   let asset2Gen = assetInfo(asset2Id).value().name.split("")
-
-  if (Generations.indexOf(asset1Gen[14]).value() >= MaxGeneration || Generations.indexOf(asset2Gen[14]).value() >= MaxGeneration) then {
+  
+  if (Generations.indexOf(asset1Gen[14]).value() >= MaxGeneration) then {
     "you can only breed ducks with generation " + Generations[MaxGeneration] + " and lower"
   } else {
-    "true"
+    if (Generations.indexOf(asset2Gen[14]).value() >= MaxGeneration) then {
+      "you can only breed ducks with generation " + Generations[MaxGeneration] + " and lower"
+    } else {
+      "true"
+    }
   }
+}
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  let generation = assetName.split("")[14]
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H") + "-" + generation
 }
 
 @Callable(i)
@@ -130,7 +157,7 @@ func startDuckBreeding() = {
     if (tryGetInteger("asset_" + firstAssetId + "_children") > 0 || tryGetInteger("asset_" + secondAssetId + "_children") > 0) then {
       throw("One duck can be used for breeding only once in its lifetime.")
     } else {
-      let breededStatus = canBeBreeded(firstAssetId.fromBase58String(), firstAssetId.fromBase58String())
+      let breededStatus = canBeBreeded(firstAssetId.fromBase58String(), secondAssetId.fromBase58String())
       if (breededStatus != "true") then {
         throw("These ducks cannot be breeded: " + breededStatus)
       } else {
@@ -164,12 +191,14 @@ func finishDuckHatching(txIdStr: String) = {
     if (processFinishHeight > height) then throw("Breeding is not finished yet " + (processFinishHeight - height).toString() + " blocks remaining, it will take around " +  (processFinishHeight - height).toString() + " minutes")
     else {
       let duckGen = generateDuck(txId, processFinishHeight)
+      let farmGen = getGen(duckGen)
       let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
 
       let asset = Issue(duckGen, description, 1, 0, false, unit, processFinishHeight)
       let assetId = asset.calculateAssetId()
 
       let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
+      let quantity = tryGetInteger("stats_"+farmGen+"_quantity")
       let parent1Id = tryGetString(getDuckParentKey(txId, 1))
       let parent2Id = tryGetString(getDuckParentKey(txId, 2))
 
@@ -178,6 +207,7 @@ func finishDuckHatching(txIdStr: String) = {
         StringEntry(duckIdKey, assetId.toBase58String()),
         StringEntry(assetId.toBase58String(), duckIdKey),
         IntegerEntry(getDuckStatsKey(duckGen), amount),
+        IntegerEntry("stats_"+farmGen+"_quantity", quantity+1),
         IntegerEntry("asset_" + parent1Id + "_children", 1),
         IntegerEntry("asset_" + parent2Id + "_children", 1),
         asset,
@@ -190,3 +220,4 @@ func finishDuckHatching(txIdStr: String) = {
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
