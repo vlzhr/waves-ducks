@@ -62,7 +62,7 @@ func getAssetOrigin(generation: String) = {
 
 func getAssetRarity(genotype: String, generation: String) = {
   let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
-  let power = pow(10000 / quantity, 4, 5, 1, 2, HALFDOWN)
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
   if (power > 0) then {power} else {2}
 }
 
