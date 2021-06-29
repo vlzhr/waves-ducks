@@ -47,7 +47,7 @@ func refPayment(refererKey: String) = {
   let referalAddress = i.originCaller.toString()
   if (i.caller.bytes != incubatorAddress && i.caller.bytes != farmingAddress) then {
     throw("This method can be called only by farming and incubator dApps")
-  } else if (refererKey == "" || referalAddress == "") then {
+  } else if (refererKey == "") then {
     []
   } else {
 
@@ -64,7 +64,7 @@ func refPayment(refererKey: String) = {
       let paymentForReferer = i.payments[0].value()
 
       let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
-      let referalDeliveredReward = "address_" + referalAddress + "_deliveredReward"
+      let referalDeliveredReward = "referer_" + refererAddress + "_referal_" + referalAddress + "_deliveredReward"
 
       let correctReferer = match getString(this, "address_" + referalAddress + "_referedBy") {
         case x: String => x
