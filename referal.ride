@@ -47,7 +47,7 @@ func refPayment(refererKey: String) = {
   let referalAddress = i.originCaller.toString()
   if (i.caller.bytes != incubatorAddress && i.caller.bytes != farmingAddress) then {
     throw("This method can be called only by farming and incubator dApps")
-  }else if (refererKey == "" || referalAddress == "") then {
+  } else if (refererKey == "" || referalAddress == "") then {
     []
   } else {
 
@@ -55,30 +55,34 @@ func refPayment(refererKey: String) = {
       case x: String => x
       case _ => refererKey
     }
-    
-    let refererAddressValue = refererAddress.addressFromStringValue()
-    let referalAddressValue = referalAddress.addressFromStringValue()
-    let paymentForReferer = i.payments[0].value()
 
-    let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
-    let referalDeliveredReward = "address_" + referalAddress + "_deliveredReward"
-
-    let correctReferer = match getString(this, "address_" + referalAddress + "_referedBy") {
-      case x: String => x
-      case _ => refererAddress
-    } 
-
-    if (refererAddress == referalAddress) then {
-      throw("you cannot be referer for yourself")
+    if (refererAddress.addressFromString() == unit) then {
+      []
     } else {
-      [
-        StringEntry(correctReferer, refererAddress),
-        IntegerEntry(refererEarnedReward, tryGetInteger(refererEarnedReward) + paymentForReferer.amount),
-        IntegerEntry(referalDeliveredReward, tryGetInteger(referalDeliveredReward) + paymentForReferer.amount),
-        ScriptTransfer(refererAddressValue, paymentForReferer.amount, paymentForReferer.assetId)
-      ]
-    }
+      let refererAddressValue = refererAddress.addressFromStringValue() 
+      let referalAddressValue = referalAddress.addressFromStringValue()
+      let paymentForReferer = i.payments[0].value()
 
+      let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
+      let referalDeliveredReward = "address_" + referalAddress + "_deliveredReward"
+
+      let correctReferer = match getString(this, "address_" + referalAddress + "_referedBy") {
+        case x: String => x
+        case _ => refererAddress
+      } 
+
+      if (refererAddress == referalAddress) then {
+        throw("you cannot be referer for yourself")
+      } else {
+        [
+          StringEntry(correctReferer, refererAddress),
+          IntegerEntry(refererEarnedReward, tryGetInteger(refererEarnedReward) + paymentForReferer.amount),
+          IntegerEntry(referalDeliveredReward, tryGetInteger(referalDeliveredReward) + paymentForReferer.amount),
+          IntegerEntry("referer_"+correctReferer+"_referal_"+referalAddress+"_amount", tryGetInteger("referer_"+correctReferer+"_referal_"+referalAddress+"_amount") + 1),
+          ScriptTransfer(refererAddressValue, paymentForReferer.amount, paymentForReferer.assetId)
+        ]
+      }
+    }
   }
 }
 
