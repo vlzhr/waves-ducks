@@ -62,16 +62,22 @@ func refPayment(refererKey: String) = {
 
     let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
     let referalDeliveredReward = "address_" + referalAddress + "_deliveredReward"
-    let currentReferer = tryGetString("address_" + referalAddress + "_referedBy")
 
-    if (currentReferer == "" || currentReferer == refererAddress) then {
+    let correctReferer = match getString(this, "address_" + referalAddress + "_referedBy") {
+      case x: String => x
+      case _ => refererAddress
+    } 
+
+    if (refererAddress == referalAddress) then {
+      throw("you cannot be referer for yourself")
+    } else {
       [
-        StringEntry(currentReferer, refererAddress),
+        StringEntry(correctReferer, refererAddress),
         IntegerEntry(refererEarnedReward, tryGetInteger(refererEarnedReward) + paymentForReferer.amount),
         IntegerEntry(referalDeliveredReward, tryGetInteger(referalDeliveredReward) + paymentForReferer.amount),
         ScriptTransfer(refererAddressValue, paymentForReferer.amount, paymentForReferer.assetId)
       ]
-    } else throw("User already has another referrer")
+    }
 
   }
 }
