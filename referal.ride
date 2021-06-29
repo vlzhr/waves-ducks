@@ -51,10 +51,15 @@ func refPayment(refererKey: String) = {
     []
   } else {
 
-    let refererAddress = match getString(this, "key_" + refererKey + "_refererAddress") {
+    let givenReferer = match getString(this, "key_" + refererKey + "_refererAddress") {
       case x: String => x
       case _ => refererKey
     }
+
+    let refererAddress = match getString(this, "address_" + referalAddress + "_referedBy") {
+      case x: String => x
+      case _ => givenReferer
+    } 
 
     if (refererAddress.addressFromString() == unit) then {
       []
@@ -66,19 +71,14 @@ func refPayment(refererKey: String) = {
       let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
       let referalDeliveredReward = "referer_" + refererAddress + "_referal_" + referalAddress + "_deliveredReward"
 
-      let correctReferer = match getString(this, "address_" + referalAddress + "_referedBy") {
-        case x: String => x
-        case _ => refererAddress
-      } 
-
       if (refererAddress == referalAddress) then {
         throw("you cannot be referer for yourself")
       } else {
         [
-          StringEntry(correctReferer, refererAddress),
+          StringEntry("address_" + referalAddress + "_referedBy", refererAddress), 
           IntegerEntry(refererEarnedReward, tryGetInteger(refererEarnedReward) + paymentForReferer.amount),
           IntegerEntry(referalDeliveredReward, tryGetInteger(referalDeliveredReward) + paymentForReferer.amount),
-          IntegerEntry("referer_"+correctReferer+"_referal_"+referalAddress+"_amount", tryGetInteger("referer_"+correctReferer+"_referal_"+referalAddress+"_amount") + 1),
+          IntegerEntry("referer_"+refererAddress+"_referal_"+referalAddress+"_amount", tryGetInteger("referer_"+refererAddress+"_referal_"+referalAddress+"_amount") + 1),
           ScriptTransfer(refererAddressValue, paymentForReferer.amount, paymentForReferer.assetId)
         ]
       }
