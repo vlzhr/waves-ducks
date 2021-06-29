@@ -1,5 +1,5 @@
 
-{-# STDLIB_VERSION 4 #-}
+{-# STDLIB_VERSION 5 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
@@ -10,6 +10,10 @@ let scale2 = 1000000
 
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+
+let refContractAddress = base58'3PGZyyPg7Mx91yaNT8k3MWxSQzuzusMUyzX'
+let RefererReward = 5 #percentage
+
 
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 
@@ -58,7 +62,7 @@ func getAssetOrigin(generation: String) = {
 
 func getAssetRarity(genotype: String, generation: String) = {
   let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
-  let power = pow(10000 / quantity, 4, 5, 1, 2, HALFDOWN)
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
   if (power > 0) then {power} else {2}
 }
 
@@ -140,7 +144,7 @@ func init() = {
 }
 
 @Callable(i)
-func buyPerch(color: String) = {
+func buyPerch(color: String, refererAddress: String) = {
   # throw("under maintence")
   if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
     throw("you need to set color properly")
@@ -148,7 +152,13 @@ func buyPerch(color: String) = {
     let firstPayment = i.payments[0].value()
     if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
     else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
+    
     else {
+      let refererRewardForPerch = firstPayment.amount / 100 * RefererReward
+    
+      strict refCall = invoke(Address(refContractAddress), "addReferal",
+      [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
+
       let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
       let perchAmount = tryGetInteger(perchAmountKey)
       [
@@ -295,5 +305,14 @@ func claimReward(asset: String) = {
 }
 
 @Verifier(tx)
-func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-        
+func verify() = {
+  # TODO: Change Oracle Public Key 
+  let oraclePublicKey = base58'ABC'
+  match (tx) {
+      case tx:DataTransaction => {
+        sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey) || 
+        sigVerify(tx.bodyBytes, tx.proofs[0], oraclePublicKey)
+      }
+      case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+    }
+}
