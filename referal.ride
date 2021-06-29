@@ -3,8 +3,8 @@
 {-# SCRIPT_TYPE ACCOUNT #-}
 
 let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
-let IncubatorDappAddress = base58'ABC'
-let FarmingDappAddress = base58'ABC'
+let incubatorAddress = base58'3P6TwNU39Ykkbeqhn5TE4a2736xsA1vXemM'
+let farmingAddress = base58'3PH75p2rmMKCV2nyW4TsAdFgFtmc61mJaqA'
 
 func tryGetInteger(key: String) = {
     match getInteger(this, key) {
@@ -28,48 +28,52 @@ func tryGetString(key: String) = {
 }
 
 @Callable(i)
-func registerRefererKey(refererKey: String) = {
-  if (isValidAddress(refererKey)) then {
-    throw("Referer key code cannot contain be a valid Waves address")
-  }else {
-    let refererAddress = i.caller.toString()
+func addRefKey(refererAddress: String, refererKey: String) = {
+  if (i.caller != this) then {
+    throw("admin only")
+  } else {
     let refStateKey = "key_" + refererKey + "_refererAddress"
     if (tryGetString(refStateKey) == "") then {
       [
         StringEntry(refStateKey, refererAddress),
         StringEntry("address_" + refererAddress + "_refererKey_" + refererKey, refererKey)
       ]
-    } else throw("This ref \"" + refererKey + "\" key is already registered")
+    } else throw("The ref key \"" + refererKey + "\" is already registered")
   }
 }
 
 @Callable(i)
-func addReferal(refererAddress: String) = {
+func refPayment(refererKey: String) = {
   let referalAddress = i.originCaller.toString()
-  if (i.caller.bytes != IncubatorDappAddress && i.caller.bytes != FarmingDappAddress) then {
+  if (i.caller.bytes != incubatorAddress && i.caller.bytes != farmingAddress) then {
     throw("This method can be called only by farming and incubator dApps")
-  }else if (refererAddress == "" || referalAddress == "") then {
+  }else if (refererKey == "" || referalAddress == "") then {
     []
-  }else if (isValidAddress(refererAddress) && isValidAddress(referalAddress)) then {
+  } else {
+
+    let refererAddress = match getString(this, "key_" + refererKey + "_refererAddress") {
+      case x: String => x
+      case _ => refererKey
+    }
+    
     let refererAddressValue = refererAddress.addressFromStringValue()
     let referalAddressValue = referalAddress.addressFromStringValue()
     let paymentForReferer = i.payments[0].value()
 
-    let keyReferer = "address_" + referalAddress + "_referer"
+    let refererEarnedReward = "address_" + refererAddress + "_earnedReward"
+    let referalDeliveredReward = "address_" + referalAddress + "_deliveredReward"
+    let currentReferer = tryGetString("address_" + referalAddress + "_referedBy")
 
-    let currentRefererAddress = tryGetString(keyReferer)
-    let refererEarnedReward = "address_" + referalAddress + "_earnedReward"
-    let referadDeliveredReward = "address_" + referalAddress + "_deliveredReward"
-
-    if (currentRefererAddress == "" || currentRefererAddress == refererAddress) then {
+    if (currentReferer == "" || currentReferer == refererAddress) then {
       [
-        StringEntry(keyReferer, refererAddress),
+        StringEntry(currentReferer, refererAddress),
         IntegerEntry(refererEarnedReward, tryGetInteger(refererEarnedReward) + paymentForReferer.amount),
-        IntegerEntry(referadDeliveredReward, tryGetInteger(referadDeliveredReward) + paymentForReferer.amount),
+        IntegerEntry(referalDeliveredReward, tryGetInteger(referalDeliveredReward) + paymentForReferer.amount),
         ScriptTransfer(refererAddressValue, paymentForReferer.amount, paymentForReferer.assetId)
       ]
     } else throw("User already has another referrer")
-  } else throw("Provided referer address is incorrect: " + refererAddress)
+
+  }
 }
 
 @Verifier(tx)
