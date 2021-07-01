@@ -120,7 +120,7 @@ func finishDuckHatching(txIdStr: String) = {
   if (hatchingTxStatus == HatchingFinished) then {
     let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
     throw("The duck was hatched and claimed already, here is the folowing: " + duckId)
-  } else 
+  } else
     if (hatchingFinishHeight > height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
     else {
       let (duckGen, farmGen) = getRandomName(txId, hatchingFinishHeight)

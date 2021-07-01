@@ -44,25 +44,28 @@ func tryGetString(key: String) = {
     }
 }
 
-func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
-func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
-func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
-func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
-func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
-func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
-func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
-func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
-
-func getAmountOrClear(amount: String) = {
-  if (amount.contains("0")) then {""} else {amount}
-}
-
 func getGen(assetName: String) = {
-  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
-  let genotype = assetName.drop(5).dropRight(3).split("")
-  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
-  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
-  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D
+  let letters = "ABCDEFGH"
+  let base = 100000000
+  let strCounter = "10000000"
+
+  func count(gen: String) =
+    strCounter.dropRight(letters.indexOf(gen).valueOrErrorMessage("Duck has unexpected gen")).parseIntValue()
+
+  let gen = assetName.drop(5).dropRight(3).split("")
+
+  let counter = (base + gen[0].count() + gen[1].count() + gen[2].count() + gen[3].count()
+    + gen[4].count() + gen[5].count() + gen[6].count() + gen[7].count()).toString().drop(1).split("")
+
+  ((if counter[0] == "0" then [] else [counter[0], "A"])
+  ++ (if counter[1] == "0" then [] else [counter[1], "B"])
+  ++ (if counter[2] == "0" then [] else [counter[2], "C"])
+  ++ (if counter[3] == "0" then [] else [counter[3], "D"])
+  ++ (if counter[4] == "0" then [] else [counter[4], "E"])
+  ++ (if counter[5] == "0" then [] else [counter[5], "F"])
+  ++ (if counter[6] == "0" then [] else [counter[6], "G"])
+  ++ (if counter[7] == "0" then [] else [counter[7], "H"])).makeString("")
 }
 
 func getAssetOrigin(generation: String) = {
@@ -88,11 +91,6 @@ func getAssetFarmingPower(assetId: ByteVector) = {
 
 func getLastKnownAssetFarmingPower(address: String, assetId: String) = {
   tryGetInteger("address_"+address+"_asset_"+assetId+"_farmingPower")
-}
-
-func getAssetsByGen(gen: String) = {
-  let s = tryGetString("assets_"+gen)
-  if (s == "") then {[]} else {s.split(",")}
 }
 
 func calcInterest(previousInterest: Int, previousInterestHeight: Int, totalFarmingPower: Int) = {
@@ -158,28 +156,28 @@ func init() = {
 
 @Callable(i)
 func buyPerch(color: String, refererAddress: String) = {
-  # throw("under maintence")
+  # throw("under maintenance")
   if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
+  } else if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+    throw("you need to set color properly")
   } else {
-    if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
-      throw("you need to set color properly")
-    } else {
-      let firstPayment = i.payments[0].value()
-      if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
-      else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
-      else {
-        let refererRewardForPerch = fraction(firstPayment.amount, RefererReward, 100)
+    let firstPayment = i.payments[0].value()
+    if (firstPayment.assetId != eggsAssetId) then
+      throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+    else if (firstPayment.amount != perchPrice) then
+      throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
+    else {
+      let refererRewardForPerch = fraction(firstPayment.amount, RefererReward, 100)
 
-        strict refCall = invoke(Address(refContractAddress), "refPayment",
-        [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
+      strict refCall = invoke(Address(refContractAddress), "refPayment",
+      [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
 
-        let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
-        let perchAmount = tryGetInteger(perchAmountKey)
-        [
-          IntegerEntry(perchAmountKey, perchAmount + 1)
-        ]
-      }
+      let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
+      let perchAmount = tryGetInteger(perchAmountKey)
+      [
+        IntegerEntry(perchAmountKey, perchAmount + 1)
+      ]
     }
   }
 }
@@ -201,7 +199,7 @@ func addFreePerch(address: String, color: String) = {
 
 @Callable(i)
 func stakeNFT() = {
-  # throw("under maintence")
+  # throw("under maintenance")
   if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
@@ -226,7 +224,7 @@ func stakeNFT() = {
 
 @Callable(i)
 func unstakeNFT(asset: String) = {
-  # throw("under maintence")
+  # throw("under maintenance")
   if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
@@ -328,7 +326,7 @@ func unstakeJackpot(asset: String) = {
 
 @Callable(i)
 func claimReward(asset: String) = {
-  # throw("under maintence")
+  # throw("under maintenance")
   if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
@@ -337,7 +335,7 @@ func claimReward(asset: String) = {
 
     let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
     let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
-    
+
     let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
     let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
 
@@ -357,4 +355,4 @@ func claimReward(asset: String) = {
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
 
-        
+
