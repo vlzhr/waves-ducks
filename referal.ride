@@ -2,9 +2,9 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58'53bLXGQhnMxAoiWnza2SJQRp7hNQZVHnyrRziLmwdVjb'
-let incubatorAddress = base58'3P6TwNU39Ykkbeqhn5TE4a2736xsA1vXemM'
-let farmingAddress = base58'3PH75p2rmMKCV2nyW4TsAdFgFtmc61mJaqA'
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let farmingAddress = base58'3PAETTtuW7aSiyKtn9GuML3RgtV1xdq1mQW'
 
 func tryGetInteger(key: String) = {
     match getInteger(this, key) {
@@ -72,7 +72,7 @@ func refPayment(refererKey: String) = {
       let referalDeliveredReward = "referer_" + refererAddress + "_referal_" + referalAddress + "_deliveredReward"
 
       if (refererAddress == referalAddress) then {
-        throw("you cannot be referer for yourself")
+        []
       } else {
         [
           StringEntry("address_" + referalAddress + "_referedBy", refererAddress), 
