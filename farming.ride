@@ -11,9 +11,8 @@ let scale2 = 1000000
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
 
-let refContractAddress = base58'3PGZyyPg7Mx91yaNT8k3MWxSQzuzusMUyzX'
+let refContractAddress = base58'3P8ejTkfRpz9WqCwCuihesNXU5k3zmFFfVe'
 let RefererReward = 5 #percentage
-
 
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 
@@ -67,10 +66,14 @@ func getAssetRarity(genotype: String, generation: String) = {
 }
 
 func getAssetFarmingPower(assetId: ByteVector) = {
-  let assetName = assetInfo(assetId).value().name
-  let generation = assetName.takeRight(2).take(1)
-  let gen = getGen(assetName) + "-" + generation
-  (gen, getAssetRarity(gen, generation))
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    (gen, getAssetRarity(gen, generation))
+  } else {
+    throw("not valid NFT")
+  }
 }
 
 func getLastKnownAssetFarmingPower(address: String, assetId: String) = {
@@ -152,11 +155,10 @@ func buyPerch(color: String, refererAddress: String) = {
     let firstPayment = i.payments[0].value()
     if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
     else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
-    
     else {
       let refererRewardForPerch = firstPayment.amount / 100 * RefererReward
-    
-      strict refCall = invoke(Address(refContractAddress), "addReferal",
+
+      strict refCall = invoke(Address(refContractAddress), "refPayment",
       [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
 
       let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
@@ -305,14 +307,5 @@ func claimReward(asset: String) = {
 }
 
 @Verifier(tx)
-func verify() = {
-  # TODO: Change Oracle Public Key 
-  let oraclePublicKey = base58'ABC'
-  match (tx) {
-      case tx:DataTransaction => {
-        sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey) || 
-        sigVerify(tx.bodyBytes, tx.proofs[0], oraclePublicKey)
-      }
-      case _ => sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
-    }
-}
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
