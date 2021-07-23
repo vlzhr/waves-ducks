@@ -1,0 +1,189 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
+let feeAmount = 50
+let delayForHatching = 2
+
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+let farmingAddress = base58'3PAETTtuW7aSiyKtn9GuML3RgtV1xdq1mQW'
+let ducklingAddress = base58'3PKmLiGEfqLWMC1H9xhzqvAZKUXfFm8uoeg'
+
+let PHOENIXBASEOPTIONS = 1000  # base chance to get a phoenix: 1 / (1000 - 1000/2 * rarity)
+
+
+func tryGetInteger(key: String) = {
+    match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+}
+
+func asString(value: Any) = match value {
+  case s: String => s
+  case _ => throw("wrong type, expected: String")
+}
+
+func tryGetString(key: String) = {
+    match getString(this, key) {
+        case a:String => a
+        case _ => ""
+    }
+}
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
+}
+
+func getAssetOrigin(generation: String) = {
+  if (generation == "G") then {incubatorAddress} else {breederAddress}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
+  if (power > 0) then {power} else {2}
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    (gen, getAssetRarity(gen, generation))
+  } else {
+    throw("not valid NFT")
+  }
+}
+
+func getRandomNumber(options: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset*8) % options
+}
+
+func getRandomWin(tx: ByteVector, finishHeight: Int, assetRarity: Int) = {
+  let phoenixOptions = PHOENIXBASEOPTIONS - fraction(PHOENIXBASEOPTIONS / 2, assetRarity, 100)  # chance = 0.1% + 0.1% * rarity (from 0.02 to 1)
+  let phoenixRandom = getRandomNumber(phoenixOptions, tx, finishHeight, 1)
+  
+  if (phoenixRandom == 1) then {
+    "phoenix"
+  } else {
+    let n = getRandomNumber(10, tx, finishHeight, 0)
+    if (n < 3) then {
+      "gone"
+    } else if (n < 5) then {
+      "duckling"
+    }
+    else if (n == 5) then { "perch_Y" }
+    else if (n == 6) then { "perch_G" }
+    else if (n == 7) then { "perch_B" }
+    else if (n == 8) then { "perch_R" }
+    else {
+      "incubator"
+    }
+  }
+}
+
+
+func getOrigin(assetId: ByteVector) = {
+  let assetName = assetInfo(assetId).value().name
+  let generation = assetName.takeRight(2).take(1)
+  if (generation == "G" || generation == "J") then {
+    incubatorAddress
+  } else {
+    breederAddress
+  }
+}
+
+
+@Callable(i)
+func initRebirth() = {
+  let assetId = i.payments[0].assetId.value()
+  let initTx = i.transactionId.toBase58String()
+  let address = i.caller.toString()
+
+  let feePayment = i.payments[1].value()
+  if (feePayment.assetId != eggsAssetId) then throw("You need to attach EGG tokens as fee")
+  else if (feePayment.amount < feeAmount)  then throw("You need to attach the following amount of EGG tokens as fee: 0." + feeAmount.toString())
+  else {
+   
+    let (gen, rarity) = getAssetFarmingPower(assetId)
+
+    strict call = invoke(Address(getOrigin(assetId)), "reduceRarity", [assetId.toBase58String(), gen], [])
+    
+    [
+      IntegerEntry("address_" + address + "_initTx_" + initTx + "_finishBlock", height+delayForHatching),
+      StringEntry("address_" + address + "_initTx_" + initTx + "_status", "open"),
+      IntegerEntry("address_" + address + "_initTx_" + initTx + "_assetRarity", rarity),
+      StringEntry("address_" + address + "_initTx_" + initTx + "_assetId", assetId.toBase58String())
+    ]
+
+  }
+}
+
+
+@Callable(i)
+func finishRebirth(initTx: String) = {
+  let address = i.caller.toString()
+  let finishBlock = tryGetInteger("address_" + address + "_initTx_" + initTx + "_finishBlock")
+  let assetRarity = tryGetInteger("address_" + address + "_initTx_" + initTx + "_assetRarity")
+  let status = tryGetString("address_" + address + "_initTx_" + initTx + "_status")
+
+  if (status != "open") then {
+    throw("rebirth is finished or not open")
+  } else {
+    if (height < finishBlock) then {
+      throw("you cannot finish rebirth, yet")
+    } else {
+      let win = getRandomWin(initTx.fromBase58String(), finishBlock, assetRarity)  
+
+      let txId = i.transactionId.toBase58String()
+      let result = if (win.indexOf("perch") != unit) then {
+        let color = win.takeRight(1)
+        strict call = invoke(Address(farmingAddress), "addFreePerch", [address, color], []) 
+        [StringEntry("address_" + address + "_initTx_" + initTx + "_result", call.asString())]
+      } else if (win == "incubator") then {
+        strict call = invoke(Address(incubatorAddress), "issueFreeDuck", [address, txId], [])
+        [StringEntry("address_" + address + "_initTx_" + initTx + "_result", call.asString())]
+      } else if (win == "phoenix") then {
+        strict call = invoke(Address(incubatorAddress), "issueJackpot", [address, txId, "WWWWWWWP"], []) 
+        [StringEntry("address_" + address + "_initTx_" + initTx + "_result", call.asString())]
+      } else if (win == "duckling") then {
+        strict call = invoke(Address(ducklingAddress), "issueFreeDuckling", [address, txId], []) 
+        [StringEntry("address_" + address + "_initTx_" + initTx + "_result", call.asString())]
+      } else {
+        [StringEntry("address_" + address + "_initTx_" + initTx + "_result", "")]
+      }
+
+      result ++ [
+        StringEntry("address_" + address + "_initTx_" + initTx + "_win", win),
+        StringEntry("address_" + address + "_initTx_" + initTx + "_status", "finish")
+      ]
+    }
+  }
+}
+
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
