@@ -1,4 +1,4 @@
-{-# STDLIB_VERSION 4 #-}
+{-# STDLIB_VERSION 5 #-}
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
@@ -12,6 +12,8 @@ let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 let MaxGeneration = 5
 let Generations = ["G", "H", "I", "K", "L", "M", "N"]
+
+let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
 
 func getProcessStatusKey(address: String, txId: ByteVector) = {
   # stores the fact of hatching, 
@@ -216,6 +218,20 @@ func finishDuckHatching(txIdStr: String) = {
         ScriptTransfer(i.caller, 1, parent2Id.fromBase58String())
       ]
     }
+}
+
+@Callable(i)
+func reduceRarity(assetId: String, farmGen: String) = {
+  let asset = assetId.fromBase58String()
+  if (i.caller != Address(rebirthAddress) && i.caller != this) then {
+    throw("admin or rebirth only")
+  } else {
+    let duckGen = assetInfo(asset).value().name
+    [
+      IntegerEntry(getDuckStatsKey(duckGen), tryGetInteger(getDuckStatsKey(duckGen)) - 1),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") - 1)
+    ]
+  }
 }
 
 @Verifier(tx)
