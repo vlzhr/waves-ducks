@@ -1,0 +1,34 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
+@Callable(i)
+func issueFreeDuckling(address: String, txIdStr: String) = {
+  if (i.caller != Address(rebirthAddress)) then {
+    throw("rebirth only")
+  } else {
+    let asset = Issue("BABY-11111111-GZ", "", 1, 0, false, unit, height)
+    let assetId = asset.calculateAssetId()
+
+    ([
+      StringEntry(address + "_" + txIdStr + "_di", assetId.toBase58String()),
+      IntegerEntry("stats_amount", tryGetInteger("stats_amount")+1),
+      asset,
+      ScriptTransfer(addressFromString(address).value(), 1, assetId)
+    ], "")
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+
