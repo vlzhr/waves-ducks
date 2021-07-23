@@ -13,6 +13,8 @@ let RefererReward = 5 #percentage
 let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
 
+let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
+
 
 func getHatchingStatusKey(address: String, txId: ByteVector) = {
   # stores the fact of hatching, 
@@ -139,6 +141,94 @@ func finishDuckHatching(txIdStr: String) = {
         ScriptTransfer(i.caller, 1, assetId)
       ]
     }
+}
+
+@Callable(i)
+func issueFreeDuck(address: String, txIdStr: String) = {
+  if (i.caller != Address(rebirthAddress)) then {
+    throw("rebirth only")
+  } else {
+    let txId = fromBase58String(txIdStr)
+    let hatchingStatusKey = getHatchingStatusKey(address, txId)
+    let finishHeightKey = getHatchingFinishHeightKey(address, txId)
+
+    let totalDucksAmount = tryGetInteger("ducks_amount")
+    let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
+    let (duckGen, farmGen) = getRandomName(txId, height)
+    let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+    let asset = Issue(duckGen, description, 1, 0, false, unit, height)
+    let assetId = asset.calculateAssetId()
+
+    let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
+
+    let duckIdKey = getDuckIdKey(address, txId)
+    ([
+      IntegerEntry(getHatchingFinishHeightKey(address, txId), height),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded),
+    
+      StringEntry(hatchingStatusKey, HatchingFinished),
+      StringEntry(duckIdKey, assetId.toBase58String()),
+      StringEntry(assetId.toBase58String(), duckIdKey),
+      IntegerEntry(getDuckStatsKey(duckGen), amount),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") + 1),
+      asset,
+      ScriptTransfer(addressFromString(address).value(), 1, assetId)
+    ], assetId.toBase58String())
+  }
+}
+
+@Callable(i)
+func issueJackpot(address: String, txIdStr: String, gen: String) = {
+  if (i.caller != Address(rebirthAddress) && i.caller != this) then {
+    throw("admin or rebirth only")
+  } else {
+    let txId = fromBase58String(txIdStr)
+    let hatchingStatusKey = getHatchingStatusKey(address, txId)
+    let finishHeightKey = getHatchingFinishHeightKey(address, txId)
+
+    let totalDucksAmount = tryGetInteger("ducks_amount")
+    let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
+    let (duckGen, farmGen) = ("DUCK-"+gen+"-JU", "8W-J")
+    let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+    let asset = Issue(duckGen, description, 1, 0, false, unit, height)
+    let assetId = asset.calculateAssetId()
+
+    let duckIdKey = getDuckIdKey(address, txId)
+    ([
+      IntegerEntry(getHatchingFinishHeightKey(address, txId), height),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded),
+    
+      StringEntry(hatchingStatusKey, HatchingFinished),
+      StringEntry(duckIdKey, assetId.toBase58String()),
+      StringEntry(assetId.toBase58String(), duckIdKey),
+      IntegerEntry(getDuckStatsKey(duckGen), tryGetInteger(getDuckStatsKey(duckGen)) + 1),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") + 1),
+      asset,
+      ScriptTransfer(addressFromString(address).value(), 1, assetId)
+    ], assetId.toBase58String())
+  }
+}
+
+@Callable(i)
+func reduceRarity(assetId: String, fGen: String) = {
+  let asset = assetId.fromBase58String()
+  if (i.caller != Address(rebirthAddress) && i.caller != this) then {
+    throw("admin or rebirth only")
+  } else {
+    let duckGen = assetInfo(asset).value().name
+    let letter = duckGen.take(6).takeRight(1)
+    let farmGen = "8"+letter+"-G"
+    [
+      IntegerEntry(getDuckStatsKey(duckGen), tryGetInteger(getDuckStatsKey(duckGen)) - 1),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") - 1)
+    ]
+  }
 }
 
 @Verifier(tx)
