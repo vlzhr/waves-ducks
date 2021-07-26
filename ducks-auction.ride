@@ -159,8 +159,8 @@ func cancelBid(auctionId: String, bidId: String) = {
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
   let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
 
-  if (i.caller.toString() != bidAuthor) then {
-    throw("Only allowed to the bid author")
+  if ((i.caller.toString() != bidAuthor) && (i.caller != this)) then {
+    throw("Only allowed to the bid author or admin")
   } else {
     if (tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status") != "open") then {
       throw("bid is not open")
@@ -169,7 +169,7 @@ func cancelBid(auctionId: String, bidId: String) = {
         StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"cancelled\"}"),
         StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "cancelled"),
         DeleteEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId),
-        ScriptTransfer(i.caller, bidAmount, unit)
+        ScriptTransfer(Address(bidAuthor.fromBase58String()), bidAmount, unit)
       ]
     }
   }
