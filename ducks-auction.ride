@@ -192,6 +192,7 @@ func acceptBid(auctionId: String, bidId: String) = {
       let recordPrice = tryGetInteger(assetId+"_recordPrice")
       let newRecordPrice = max([recordPrice, bidAmount])
       [
+        StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "finished"),
         StringEntry("auction_" + auctionId + "_status", "finished"),
         StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"finished\"}"),
         IntegerEntry("auction_" + auctionId + "_finalPrice", bidAmount),
