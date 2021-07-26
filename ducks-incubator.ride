@@ -1,0 +1,237 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
+let delayForHatching = 2
+let discountCoefficient = 10
+let typesAmount = 6
+
+let refContractAddress = base58'3P8ejTkfRpz9WqCwCuihesNXU5k3zmFFfVe'
+let RefererReward = 5 #percentage
+
+let HatchingStarted = "HATCHING_STARTED"
+let HatchingFinished = "HATCHING_FINISHED"
+
+let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
+
+
+func getHatchingStatusKey(address: String, txId: ByteVector) = {
+  # stores the fact of hatching, 
+  # if key exists = hatching started 
+  # if false = not claimed
+  # if true = claimed and nft id will be in the key of getDuckIdKey
+  address + "_" + txId.toBase58String() +  "_status"
+}
+
+func getHatchingFinishHeightKey(address: String, txId: ByteVector) = {
+  address + "_" + txId.toBase58String() +  "_fh"
+}
+
+func getDuckIdKey(address: String, txId: ByteVector) = {
+  address + "_" + txId.toBase58String() +  "_di"
+}
+
+func getDuckStatsKey(genString: String) = {
+  "stats_" + genString + "_amount"
+}
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
+func getRandomNumber(variants: Int, txId: ByteVector, hatchingFinishHeight: Int, offset: Int) = {
+  let randomSeedBlock = blockInfoByHeight(hatchingFinishHeight-1).value()
+  let randomHash = sha256(txId + randomSeedBlock.vrf.value())
+  randomHash.toInt(offset*8) % variants
+}
+
+func wasUniqueBorn(gen: String) = {
+  tryGetInteger(getDuckStatsKey(gen))
+}
+
+func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
+  let jackpotRandom = getRandomNumber(500, txId, hatchingFinishHeight, 0)
+  if (jackpotRandom == 1 && wasUniqueBorn("DUCK-WWWWWWWW-JU") == 0) then {
+    ("DUCK-WWWWWWWW-JU", "8W-J")
+  } else {
+    let typeRandom = getRandomNumber(4, txId, hatchingFinishHeight, 0)
+    let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 1)
+    let color = if (colorRandom == 0) then "Y"
+      else if (colorRandom == 1) then "G" 
+      else if (colorRandom == 2) then "B" 
+      else "R"
+
+    if (typeRandom == 0) then ("DUCK-FFFFFFFF-G" + color, "8F-G")
+      else if (typeRandom == 1) then ("DUCK-DDDDDDDD-G" + color, "8D-G")
+      else if (typeRandom == 2) then ("DUCK-CCCCCCCC-G" + color, "8C-G")
+      else ("DUCK-EEEEEEEE-G" + color, "8E-G")
+    }
+}
+
+func countEggsNeededAmount(totalDucksAmount: Int) = {
+  let n = totalDucksAmount
+  let g = discountCoefficient
+  let t = typesAmount
+  let price = pow((100 + (n*g)/(10*t)), 2, 5, 1, 2, DOWN)
+  price
+}
+
+@Callable(i)
+func startDuckHatching(refererAddress: String) = {
+
+  let totalDucksAmount = tryGetInteger("ducks_amount")
+  let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
+  let firstPayment = i.payments[0].value()
+  if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+   else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGlets: " + eggsNeeded.toString())
+   else {
+      let refererReward = firstPayment.amount / 100 * RefererReward
+      strict refCall = invoke(Address(refContractAddress), "refPayment",
+      [refererAddress], [AttachedPayment(eggsAssetId, refererReward)])
+
+     [
+      StringEntry(getHatchingStatusKey(i.caller.toString(), i.transactionId), HatchingStarted),
+      IntegerEntry(getHatchingFinishHeightKey(i.caller.toString(), i.transactionId), height + delayForHatching),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded),
+      ScriptTransfer(i.caller, firstPayment.amount - eggsNeeded, eggsAssetId)
+     ]
+  }
+}
+
+
+@Callable(i)
+func finishDuckHatching(txIdStr: String) = {
+
+  let txId = fromBase58String(txIdStr)
+  let hatchingStatusKey = getHatchingStatusKey(i.caller.toString(), txId)
+  let finishHeightKey = getHatchingFinishHeightKey(i.caller.toString(), txId)
+  let duckIdKey = getDuckIdKey(i.caller.toString(), txId)
+
+  let hatchingTxStatus = getStringValue(this, hatchingStatusKey)
+  let hatchingFinishHeight = getIntegerValue(this, finishHeightKey)
+  
+  if (hatchingTxStatus == HatchingFinished) then {
+    let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
+    throw("The duck was hatched and claimed already, here is the folowing: " + duckId)
+  } else 
+    if (hatchingFinishHeight > height) then throw("Hatching is not finished yet " + (hatchingFinishHeight - height).toString() + " blocks remaining, it will take around " +  (hatchingFinishHeight - height).toString() + " minutes")
+    else {
+      let (duckGen, farmGen) = getRandomName(txId, hatchingFinishHeight)
+      let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+      let asset = Issue(duckGen, description, 1, 0, false, unit, hatchingFinishHeight)
+      let assetId = asset.calculateAssetId()
+
+      let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
+
+      [
+        StringEntry(hatchingStatusKey, HatchingFinished),
+        StringEntry(duckIdKey, assetId.toBase58String()),
+        StringEntry(assetId.toBase58String(), duckIdKey),
+        IntegerEntry(getDuckStatsKey(duckGen), amount),
+        IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") + 1),
+        asset,
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+    }
+}
+
+@Callable(i)
+func issueFreeDuck(address: String, txIdStr: String) = {
+  if (i.caller != Address(rebirthAddress)) then {
+    throw("rebirth only")
+  } else {
+    let txId = fromBase58String(txIdStr)
+    let hatchingStatusKey = getHatchingStatusKey(address, txId)
+    let finishHeightKey = getHatchingFinishHeightKey(address, txId)
+
+    let totalDucksAmount = tryGetInteger("ducks_amount")
+    let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
+    let (duckGen, farmGen) = getRandomName(txId, height)
+    let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+    let asset = Issue(duckGen, description, 1, 0, false, unit, height)
+    let assetId = asset.calculateAssetId()
+
+    let amount = tryGetInteger(getDuckStatsKey(duckGen)) + 1
+
+    let duckIdKey = getDuckIdKey(address, txId)
+    ([
+      IntegerEntry(getHatchingFinishHeightKey(address, txId), height),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded),
+    
+      StringEntry(hatchingStatusKey, HatchingFinished),
+      StringEntry(duckIdKey, assetId.toBase58String()),
+      StringEntry(assetId.toBase58String(), duckIdKey),
+      IntegerEntry(getDuckStatsKey(duckGen), amount),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") + 1),
+      asset,
+      ScriptTransfer(addressFromString(address).value(), 1, assetId)
+    ], assetId.toBase58String())
+  }
+}
+
+@Callable(i)
+func issueJackpot(address: String, txIdStr: String, gen: String) = {
+  if (i.caller != Address(rebirthAddress) && i.caller != this) then {
+    throw("admin or rebirth only")
+  } else {
+    let txId = fromBase58String(txIdStr)
+    let hatchingStatusKey = getHatchingStatusKey(address, txId)
+    let finishHeightKey = getHatchingFinishHeightKey(address, txId)
+
+    let totalDucksAmount = tryGetInteger("ducks_amount")
+    let eggsNeeded = countEggsNeededAmount(totalDucksAmount)
+
+    let (duckGen, farmGen) = ("DUCK-"+gen+"-JU", "8W-J")
+    let description = "{\"genotype\": \"" + duckGen + "\", \"crossbreeding\": true}"
+
+    let asset = Issue(duckGen, description, 1, 0, false, unit, height)
+    let assetId = asset.calculateAssetId()
+
+    let duckIdKey = getDuckIdKey(address, txId)
+    ([
+      IntegerEntry(getHatchingFinishHeightKey(address, txId), height),
+      IntegerEntry("ducks_amount", totalDucksAmount + 1),
+      IntegerEntry("ducks_last_price", eggsNeeded),
+    
+      StringEntry(hatchingStatusKey, HatchingFinished),
+      StringEntry(duckIdKey, assetId.toBase58String()),
+      StringEntry(assetId.toBase58String(), duckIdKey),
+      IntegerEntry(getDuckStatsKey(duckGen), tryGetInteger(getDuckStatsKey(duckGen)) + 1),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") + 1),
+      asset,
+      ScriptTransfer(addressFromString(address).value(), 1, assetId)
+    ], assetId.toBase58String())
+  }
+}
+
+@Callable(i)
+func reduceRarity(assetId: String, fGen: String) = {
+  let asset = assetId.fromBase58String()
+  if (i.caller != Address(rebirthAddress) && i.caller != this) then {
+    throw("admin or rebirth only")
+  } else {
+    let duckGen = assetInfo(asset).value().name
+    let letter = duckGen.take(6).takeRight(1)
+    let farmGen = "8"+letter+"-G"
+    [
+      IntegerEntry(getDuckStatsKey(duckGen), tryGetInteger(getDuckStatsKey(duckGen)) - 1),
+      IntegerEntry("stats_"+farmGen+"_quantity", tryGetInteger("stats_"+farmGen+"_quantity") - 1)
+    ]
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+
+        

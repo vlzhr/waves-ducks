@@ -1,0 +1,329 @@
+
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
+let perchPrice = 100
+let scale = 10000
+let scale2 = 1000000
+
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+
+let refContractAddress = base58'3P8ejTkfRpz9WqCwCuihesNXU5k3zmFFfVe'
+let RefererReward = 5 #percentage
+
+let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
+
+
+let GENS = ["A", "B", "C", "D", "E", "F", "G"]
+
+func getRewardPerBlock() = {
+  684 # 0.0684 EGGs per block
+}
+
+func tryGetInteger(key: String) = {
+    match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+}
+
+func tryGetString(key: String) = {
+    match getString(this, key) {
+        case a:String => a
+        case _ => ""
+    }
+}
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
+}
+
+func getAssetOrigin(generation: String) = {
+  if (generation == "G") then {incubatorAddress} else {breederAddress}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
+  if (power > 0) then {power} else {2}
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    (gen, getAssetRarity(gen, generation))
+  } else {
+    throw("not valid NFT")
+  }
+}
+
+func getLastKnownAssetFarmingPower(address: String, assetId: String) = {
+  tryGetInteger("address_"+address+"_asset_"+assetId+"_farmingPower")
+}
+
+func getAssetsByGen(gen: String) = {
+  let s = tryGetString("assets_"+gen)
+  if (s == "") then {[]} else {s.split(",")}
+}
+
+func calcInterest(previousInterest: Int, previousInterestHeight: Int, totalFarmingPower: Int) = {
+  # interest = amount of EGGlets you would earn if staked 1 percent of farming power since the very first block of farming
+  previousInterest + scale * getRewardPerBlock() * (height-previousInterestHeight) / totalFarmingPower
+}
+
+func getCurrentInterest() = {
+  if (tryGetInteger("total_farmingPower") > 0) then {
+    let previousInterest = tryGetInteger("total_lastCheckInterest")
+    let previousInterestHeight = tryGetInteger("total_lastCheckInterestHeight")
+    let totalFarmingPower = tryGetInteger("total_farmingPower")
+
+    calcInterest(previousInterest, previousInterestHeight, totalFarmingPower)
+  } else if (tryGetInteger("total_startHeight") != 0) then { tryGetInteger("total_lastCheckInterest") } else { throw("farming is not launched, yet") }
+}
+
+
+func calcAssetRewardDelta(address: String, assetId: String, assetFarmingPower: Int) = {
+  let lastCheckAssetInterest = tryGetInteger("address_"+address+"_asset_"+assetId+"_lastCheckInterest")
+  let currentInterest = getCurrentInterest()
+
+  assetFarmingPower * (currentInterest - lastCheckAssetInterest)
+}
+
+
+func addAssetIdToGenEntry(assetId: String, assetGen: String) = {
+  let currentValue = tryGetString("assets_"+assetGen+"_locked")
+  if (currentValue == "") then {assetId} else {currentValue+","+assetId}
+}
+
+
+func getStakeResult(address: String, assetId: ByteVector, assetFarmingPower: Int) = {
+  let asset = assetId.toBase58String()
+  [
+    IntegerEntry("total_farmingPower", tryGetInteger("total_farmingPower") + assetFarmingPower),
+    IntegerEntry("total_lastCheckInterest", getCurrentInterest()),
+    IntegerEntry("total_lastCheckInterestHeight", height),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_farmingPower", assetFarmingPower),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_lastCheckInterest", getCurrentInterest())
+  ]
+}
+
+func getUnstakeResult(address: String, assetId: ByteVector, rewardDelta: Int, withdrawnAmount: Int, assetFarmingPower: Int) = {
+  let asset = assetId.toBase58String()
+  [
+    IntegerEntry("total_farmingPower", tryGetInteger("total_farmingPower") - assetFarmingPower),
+    IntegerEntry("total_lastCheckInterest", getCurrentInterest()),
+    IntegerEntry("total_lastCheckInterestHeight", height),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_farmingPower", 0),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_lastCheckInterest", getCurrentInterest()),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount") + withdrawnAmount * scale2),
+    IntegerEntry("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount") + rewardDelta)
+  ]
+}
+
+@Callable(i)
+func init() = {
+  if (i.caller != this) then { throw("admin only") } else {
+    [ IntegerEntry("total_startHeight", height) ]
+  }
+}
+
+@Callable(i)
+func buyPerch(color: String, refererAddress: String) = {
+  # throw("under maintence")
+  if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+    throw("you need to set color properly")
+  } else {
+    let firstPayment = i.payments[0].value()
+    if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+    else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
+    else {
+      let refererRewardForPerch = firstPayment.amount / 100 * RefererReward
+
+      strict refCall = invoke(Address(refContractAddress), "refPayment",
+      [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
+
+      let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
+      let perchAmount = tryGetInteger(perchAmountKey)
+      [
+        IntegerEntry(perchAmountKey, perchAmount + 1)
+      ]
+    }
+  }
+}
+
+@Callable(i)
+func addFreePerch(address: String, color: String) = {
+  if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+    throw("you need to set color properly")
+  } else if ((i.caller != Address(rebirthAddress)) && (i.caller != this)) then {
+    throw("rebirth only")
+  } else {
+    let perchAmountKey = "address_" + address + "_perchesAvailable_" + color
+    let perchAmount = tryGetInteger(perchAmountKey)
+    ([
+      IntegerEntry(perchAmountKey, perchAmount + 1)
+    ], "")
+  }
+}
+
+@Callable(i)
+func stakeNFT() = {
+  # throw("under maintence")
+  let assetId = i.payments[0].value().assetId.value()
+  let address = i.caller.toString()
+
+  let color = assetInfo(assetId).value().name.takeRight(1)
+  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
+
+  if (availablePerches <= 0) then {
+    throw("no perches available for the color " + color)
+  } else {
+    let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+    let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
+
+    getStakeResult(address, assetId, assetFarmingPower) ++ [
+      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1)
+    ]
+  }  
+}
+
+@Callable(i)
+func unstakeNFT(asset: String) = {
+  # throw("under maintence")
+  let assetId = asset.fromBase58String()
+  let address = i.caller.toString()
+
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+  let color = assetInfo(assetId).value().name.takeRight(1)
+  if (assetFarmingPower <= 0) then {
+    throw("asset not available")
+  } else {
+    if (color == "U") then {
+      throw("use another function to unstake Jackpot NFT")
+    } else {
+
+      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+      result ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+        ScriptTransfer(i.caller, reward, eggsAssetId),
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+
+    }
+
+  }
+}
+
+@Callable(i)
+func stakeJackpot(color: String) = {
+  let assetId = i.payments[0].value().assetId.value()
+  let address = i.caller.toString()
+  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
+
+  let assetIssuer = assetInfo(assetId).value().issuer.bytes
+
+  if (assetIssuer == incubatorAddress || assetIssuer == breederAddress) then {
+    if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+      throw("jackpot only")
+    } else {
+      if (availablePerches <= 0) then {
+        throw("no perches available for the color " + color)
+      } else {
+        getStakeResult(address, assetId, 100) ++ [
+          IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
+          StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
+        ]
+      }
+    }
+  } else {
+      throw("asset is not valid")
+    }
+}
+
+@Callable(i)
+func unstakeJackpot(asset: String) = {
+  let assetId = asset.fromBase58String()
+  let address = i.caller.toString()
+
+  let color = tryGetString("address_"+address+"_asset_"+asset+"_perchColor")
+
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+  if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+    throw("jackpot only")
+  } else {
+    if (assetFarmingPower > 0) then {
+      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+      result ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+        ScriptTransfer(i.caller, reward, eggsAssetId),
+        ScriptTransfer(i.caller, 1, assetId)
+      ]
+    } else {
+      throw("")
+    }
+  }
+}
+
+@Callable(i)
+func claimReward(asset: String) = {
+  # throw("under maintence")
+  let address = i.caller.toString()
+  let assetId = asset.fromBase58String()
+
+  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+  
+  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+  if (reward <= 0) then {
+    throw("you have no EGGs to withdraw")
+  } else {
+    [
+      IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount") + reward * scale2),
+      ScriptTransfer(Address(address.fromBase58String()), reward, eggsAssetId)
+    ]
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
