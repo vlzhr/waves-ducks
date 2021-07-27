@@ -45,7 +45,6 @@ func getAssetGenotype(assetId: ByteVector) = {
 }
 
 func getBidCancelResults(auctionId: String, bidId: String) = {
-      
   let assetId = this.getStringValue("auction_" + auctionId + "_assetId")
 
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
@@ -186,18 +185,13 @@ func cancelBid(auctionId: String, bidId: String) = {
 
 @Callable(i)
 func cancelOutdatedBid(auctionId: String, bidId: String) = {
-  let bidCancellerOraclePubKey = base58'A'
   let auctionStatus = tryGetString("auction_" + auctionId + "_status")
-  if (i.callerPublicKey != bidCancellerOraclePubKey) then {
-    throw("Only allowed to the bidCancellerOracle")
+  if (tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status") != "open") then {
+    throw("bid is not open")
+  } else if (auctionStatus != "cancelled" && auctionStatus != "finished") then {
+    throw("this oracle can cancel bids only for canceled or finished auctions")
   } else {
-    if (tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status") != "open") then {
-      throw("bid is not open")
-    } else if (auctionStatus != "cancelled" && auctionStatus != "finished") then {
-      throw("this oracle can cancel bids only for canceled or finished auctions")
-    } else {
-      getBidCancelResults(auctionId, bidId)
-    }
+    getBidCancelResults(auctionId, bidId)
   }
 }
 
