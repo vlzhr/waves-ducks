@@ -1,0 +1,149 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let incubatorAddress = base58'3P6TwNU39Ykkbeqhn5TE4a2736xsA1vXemM'
+let breederAddress = base58'3P9REuLBnYBafDqtEu6hfzs2Rv2haSU158y'
+
+let rentDuration = 24*60
+
+func tryGetInteger(key: String) = {
+    match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+}
+
+func tryGetString(key: String) = {
+    match getString(this, key) {
+        case a:String => a
+        case _ => ""
+    }
+}
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
+}
+
+func getAssetOrigin(generation: String) = {
+  if (generation == "G") then {incubatorAddress} else {breederAddress}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
+  if (power > 0) then {power} else {2}
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    (gen, getAssetRarity(gen, generation))
+  } else {
+    throw("not valid NFT")
+  }
+}
+
+@Callable(i)
+func leaseJedi(gamesAmountMin: Int, winRateMin: Int, regiterDateMin: Int) = {
+  let assetId = i.payments[0].assetId.value()
+  let assetIdStr = assetId.toBase58String()
+  let assetFarmingPower = getAssetFarmingPower(assetId)  # will throw error if NFT is not valid
+  let ownerAddress = i.caller.toString()
+
+  [
+    StringEntry("asset_"+assetIdStr+"_owner", ownerAddress),
+    IntegerEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_unlockAt", height),
+    StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_status", "ready"),
+    IntegerEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_rarity", assetFarmingPower._2)
+  ]
+}
+
+@Callable(i)
+func unleaseJedi(assetIdStr: String) = {
+  let ownerAddress = i.caller.toString()
+  let unlockHeight = tryGetInteger("address_"+ownerAddress+"_asset_"+assetIdStr+"_unlockAt")
+
+  if (unlockHeight == 0) then {
+    throw("jedi not found")
+  }
+  else if (unlockHeight > height) then {
+    [
+      StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_status", "requestToUnlease")
+    ]
+  } else {
+    [
+      StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_status", "cancelled"),
+      ScriptTransfer(i.caller, 1, assetIdStr.fromBase58String())
+    ]
+  }
+}
+
+@Callable(i)
+func claimJedi(assetIdStr: String) = {
+  let ownerAddress = "asset_"+assetIdStr+"_owner"
+  let unlockHeight = tryGetInteger("address_"+ownerAddress+"_asset_"+assetIdStr+"_unlockAt")
+  let status = tryGetString("address_"+ownerAddress+"_asset_"+assetIdStr+"_status")
+
+  if (status != "requestToUnlease") then {
+    throw("owner needs to unlease Jedi first")
+  } else if (unlockHeight > height) then {
+    throw("please wait for unlock time first. blocks left: " + (height - unlockHeight).toString())
+  } else {
+    [
+      ScriptTransfer(i.caller, 1, assetIdStr.fromBase58String())
+    ]
+  }
+}
+
+@Callable(i)
+func rentJedi(assetIdStr: String) = {
+  let ducklingId = i.payments[0].assetId.value() 
+  let ducklingIdStr = ducklingId.toBase58String()
+
+  let ownerAddress = tryGetString("asset_"+assetIdStr+"_owner")
+  let renterAddress = i.caller.toString()
+
+  if (tryGetString("address_"+ownerAddress+"_asset_"+assetIdStr+"_status") == "ready" ||
+      (tryGetString("address_"+ownerAddress+"_asset_"+assetIdStr+"_status") == "rented" &&
+       tryGetInteger("address_"+ownerAddress+"_asset_"+assetIdStr+"_unlockAt") < height)
+      ) then {
+        [
+          IntegerEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_unlockAt", height+rentDuration),
+          StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_status", "rented"),
+          StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_lastDuckling", ducklingIdStr),
+          StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_lastRenter", renterAddress),
+          StringEntry("duckling_"+ducklingIdStr+"_currentJedi", assetIdStr),
+          StringEntry("address_"+ownerAddress+"_asset_"+assetIdStr+"_renters", tryGetString("address_"+ownerAddress+"_asset_"+assetIdStr+"_renters") + "," + ducklingIdStr),
+
+          ScriptTransfer(i.caller, 1, ducklingId)
+        ]
+      }
+  else {
+    throw("jedi is unavailable")
+  }
+}
+
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
