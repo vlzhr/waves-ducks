@@ -1,0 +1,333 @@
+{-# STDLIB_VERSION 5 #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+{-# CONTENT_TYPE DAPP #-}
+
+let masterAccountPubKey = base58'23NWm7kUDQqbTVkirjd5JXWRZaWVoS4ZesmRNHicBa3T'
+let redeployPubKey = base58''
+let feePercent = 10
+
+
+func keyTotalLiquidity() = {"total_liquidity"}
+func keyInitialized() = {"INITIALIZED"}
+func keyLiquidityThreshold() = {"LIQUIDITY_THRESHOLD"}
+func keyTotalShareTokens() = {"total_share_tokens"}
+func keyShareAssetId() = {"SHARE_ASSET_ID"}
+func keyIncubatorAddress() = {"INCUBATOR_DAPP"}
+func keyBreederAddress() = {"BREEDER_DAPP"}
+func keyFarmingAddress() = {"FARMING_DAPP"}
+func keyMarketplaceAddress() = {"MARKETPLACE"}
+func keyTotalFarmingReward() = {"total_farming_reward"}
+func keyFarmingRewardClaimed() = {"farming_reward_claimed"}
+func keyCeoCollectedFee() = {"ceo_collected_fee"}
+func keyCeoCollectedFeeOverall() = {"ceo_fee_overall"}
+
+func tryGetInteger(key: String) = {
+    let val = match getInteger(this, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
+func tryGetString(key: String) = {
+    let val = match getString(this, key) {
+        case b:String => b
+        case _ => ""
+    }
+    val
+}
+
+func tryGetBoolean(key: String) = {
+    let val = match getBoolean(this, key) {
+        case b:Boolean => b
+        case _ => unit
+    }
+    val
+}
+
+func tryGetStringFromAccount(address: Address, key: String) = {
+    let val = match getString(address, key) {
+        case b:String => b
+        case _ => ""
+    }
+    val
+}
+
+func tryGetIntegerFromAccount(address: Address, key: String) = {
+    let val = match getInteger(address, key) {
+        case b:Int => b
+        case _ => 0
+    }
+    val
+}
+
+func getMarketplaceAddress() = {
+  tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyMarketplaceAddress())
+}
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H")
+}
+
+
+func getAssetOrigin(generation: String) = {
+  let incubatorAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyIncubatorAddress())
+  let breederAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyBreederAddress())
+
+  if (generation == "G") then {incubatorAddress.fromBase58String()} else {breederAddress.fromBase58String()}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
+  if (power > 0) then {power} else {2}
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  let breederAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyBreederAddress()).fromBase58String()
+  let incubatorAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyIncubatorAddress()).fromBase58String()
+  
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    getAssetRarity(gen, generation)
+  } else {
+    throw("_20")
+  }
+}
+
+func getDuckMarketPrice(nftId: ByteVector) = {
+  let rarity = getAssetFarmingPower(nftId)
+  let breederAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyBreederAddress()).addressFromStringValue()
+  let canBreed = tryGetIntegerFromAccount(breederAddress, "asset_" + nftId.toBase58String() + "_children")
+  let canBreedText = if canBreed > 0 then "1" else "0"
+  tryGetIntegerFromAccount(masterAccountPubKey.addressFromPublicKey(), "r-" + rarity.toString() + "-b-" + canBreedText)
+}
+
+func getDuckAssetIdByAuctionId(auctionId: String) = {
+  let marketplaceAddress = getMarketplaceAddress()
+  tryGetStringFromAccount(marketplaceAddress.addressFromStringValue(), "auction_" + auctionId + "_assetId")
+}
+
+func getBidAmount(auctionId: String, bidId: String) = {
+  let marketplaceAddress = getMarketplaceAddress()
+  tryGetIntegerFromAccount(marketplaceAddress.addressFromStringValue(), "auction_" + auctionId + "_bid_" + bidId + "_amount")
+}
+
+func getEggAssetId() = {
+  getStringValue(masterAccountPubKey.addressFromPublicKey(), "EGG_ASSET_ID").fromBase58String()
+}
+func getShareAssetId() = {
+  tryGetString(keyShareAssetId()).fromBase58String()
+}
+
+@Callable(i)
+func initCollectiveFarm(name: String, minimumThreshold: Int) = {
+  if (i.callerPublicKey != masterAccountPubKey) then {
+      throw("_1")
+  }else if (tryGetBoolean(keyInitialized()) != unit) then {
+      throw("_2")
+  } else {
+      let shareTokens = 10000
+      let shareToken = Issue(name, "Share token for the \"" + name + "\" collective farm", shareTokens, 8, true)
+      
+      [
+        StringEntry(keyShareAssetId(), shareToken.calculateAssetId().toBase58String()),
+        BooleanEntry(keyInitialized(), true),
+        IntegerEntry(keyTotalLiquidity(), 10),
+        IntegerEntry(keyTotalShareTokens(), shareTokens),
+        shareToken,
+        ScriptTransfer(i.caller, shareTokens, shareToken.calculateAssetId()),
+        IntegerEntry(keyLiquidityThreshold(), minimumThreshold)
+      ]
+  }
+}
+
+@Callable(i)
+func provideLiquidity() = {
+  let eggAssetId = getEggAssetId()
+  if (i.payments[0].assetId != eggAssetId) then {
+    throw("_4")
+  } else {
+    let totalLiquidity = tryGetInteger(keyTotalLiquidity())
+    let totalShareTokens = tryGetInteger(keyTotalShareTokens())
+    let currentLiquidityAmount = i.payments[0].amount
+    let currentTotalFarmingReward = tryGetInteger(keyTotalFarmingReward())
+    let shareTokensToGive = fraction(totalShareTokens, currentLiquidityAmount, totalLiquidity)
+
+    let shareTokensId = tryGetString(keyShareAssetId()).fromBase58String()
+
+    let reissue = Reissue(getShareAssetId(), shareTokensToGive, true)
+
+    [
+      reissue,
+      ScriptTransfer(i.caller, shareTokensToGive, shareTokensId),
+      IntegerEntry(keyTotalShareTokens(), totalShareTokens + shareTokensToGive),
+      IntegerEntry(keyTotalLiquidity(), totalLiquidity + i.payments[0].amount.value())
+    ]
+  }
+}
+
+
+@Callable(i)
+func claimFarmingRewardProxy(nftIds: List[String]) = {
+  let farmingDappAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyFarmingAddress())
+
+  func claimOneReward(accum: Int, nftId: String) = {
+    strict invResult = invoke(farmingDappAddress.addressFromStringValue(), "claimReward", [nftId], [])
+    match invResult {
+      case int: Int => accum + int
+      case _ => throw("_5")
+    }
+  }
+
+  let foldResult = FOLD<30>(nftIds, 0, claimOneReward)
+  let claimedReward = match foldResult {
+    case int: Int => int
+    case _ => throw("_6")
+  }
+  let farmCeoFeeSize = fraction(claimedReward, feePercent, 100)
+
+  let currentTotalFarmingReward = tryGetInteger(keyTotalFarmingReward())
+  let currentCeoCollectedFee = tryGetInteger(keyCeoCollectedFee())
+  let currentCeoCollectedFeeOverall = tryGetInteger(keyCeoCollectedFeeOverall())
+
+  [
+    IntegerEntry(keyTotalFarmingReward(), currentTotalFarmingReward + (claimedReward - farmCeoFeeSize)),
+    IntegerEntry(keyCeoCollectedFee(), currentCeoCollectedFee + farmCeoFeeSize),
+    IntegerEntry(keyCeoCollectedFeeOverall(), currentCeoCollectedFeeOverall + farmCeoFeeSize)
+  ]
+}
+
+@Callable(i)
+func claimCeoFee(address: String) = {
+  if (i.caller == this) then {
+    let currentCeoCollectedFee = tryGetInteger(keyCeoCollectedFee())
+    [
+      ScriptTransfer(address.addressFromStringValue(), currentCeoCollectedFee, getEggAssetId()),
+      IntegerEntry(keyCeoCollectedFee(), 0)
+    ]
+  } else throw("_8")
+}
+
+@Callable(i)
+func startLiquidation(auctionId: String) = {
+  throw("_7")
+}
+
+@Callable(i)
+func voteForLiquidation(auctionId: String) = {
+  throw("_7")
+}
+
+# params format
+@Callable(i)
+func callMarketplaceProxy(function: String, int1: Int, int2: Int, str1: String, str2: String) = {
+  let marketplaceDappAddress = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), keyMarketplaceAddress()).addressFromStringValue()
+  # if initAuction => allow to sell only with price > marketPrice - 15%
+  if (function == "initAuction") then {
+    let asset = i.payments[0].value()
+    let duckMarketPrice = getDuckMarketPrice(asset.assetId.value())
+    let initialPrice = int1
+    let buyoutPrice = int2
+    if ((initialPrice >= duckMarketPrice - (duckMarketPrice / 100 * 15)) && buyoutPrice >= initialPrice) then {
+      strict initAuction = invoke(marketplaceDappAddress, "initAuction", [initialPrice, buyoutPrice, str1], [AttachedPayment(asset.assetId.value(), 1)])
+      []
+    } else throw("_9=" + duckMarketPrice.toString())
+  } else if (function == "placeBid") then {
+    # if placeBid => allow to buy only with price < marketPrice + 10%
+    let auctionId = str1
+    let duckAssetId = getDuckAssetIdByAuctionId(auctionId)
+    let duckMarketPrice = getDuckMarketPrice(duckAssetId.fromBase58String())
+    let bidAmount = i.payments[0].value().amount.value()
+    if (bidAmount < duckMarketPrice + (duckMarketPrice / 100 * 10)) then {
+      strict placeBid = invoke(marketplaceDappAddress, "placeBid", [auctionId], [AttachedPayment(unit, bidAmount)])
+      []
+    } else throw("_10=" + duckMarketPrice.toString())
+  } else if (function == "acceptBid") then {
+    # if acceptBid => allow to sell only with price > marketPrice - 15%
+    let auctionId = str1
+    let bidId = str2
+    let duckAssetId = getDuckAssetIdByAuctionId(auctionId)
+    let duckMarketPrice = getDuckMarketPrice(duckAssetId.fromBase58String())
+    let bidAmount = getBidAmount(auctionId, bidId)
+
+    if (bidAmount >= duckMarketPrice - (duckMarketPrice / 100 * 15)) then {
+      strict acceptBid = invoke(marketplaceDappAddress, "acceptBid", [auctionId, bidId], [])
+      []
+    } else throw("_11=" + duckMarketPrice.toString())
+  } else if (function == "instantBuy") then {
+    # if acceptBid => allow to sell only with price > marketPrice - 15%
+    let auctionId = str1
+    let duckAssetId = getDuckAssetIdByAuctionId(auctionId)
+    let duckMarketPrice = getDuckMarketPrice(duckAssetId.fromBase58String())
+    let bidAmount = i.payments[0].value().amount.value()
+    if (bidAmount < duckMarketPrice + (duckMarketPrice / 100 * 10)) then {
+      strict instantBuy = invoke(marketplaceDappAddress, "instantBuy", [auctionId], [AttachedPayment(unit, bidAmount)])
+      []
+    } else throw("_12" + duckMarketPrice.toString())
+  } else throw("_13")
+}
+
+@Verifier(tx)
+func verify() = {
+  let checkStarted = tryGetInteger(keyTotalLiquidity()) >= tryGetInteger(keyLiquidityThreshold())
+
+  func totalEggSpending(accum: Int, payment: AttachedPayment) = {
+    if (payment.assetId == getEggAssetId()) then accum + payment.amount else accum
+  }
+
+  if (checkStarted.valueOrElse(false) == false) then throw("_14") else
+  match (tx) {
+      case inv:InvokeScriptTransaction => {
+        let currentTotalFarmingReward = tryGetInteger(keyTotalFarmingReward())
+
+        # Avoid scam with high fees => allow only Waves and minimal amount
+        if (inv.fee > 900000 || inv.feeAssetId != unit) then {
+          throw("_15")
+        }else if (inv.function == "claimReward") then {
+          throw("_16")
+        } else if (inv.payments.size() > 2) then {
+          throw("_17")
+        } else if ((assetBalance(this, getEggAssetId()) - FOLD<3>(inv.payments, 0, totalEggSpending)) < currentTotalFarmingReward) then {
+          throw("_18=" + currentTotalFarmingReward.toString())
+        } else if (inv.dApp.addressFromRecipient() == this && inv.function == "claimCeoFee") then {
+          true
+        } else if (inv.dApp.addressFromRecipient() == this && inv.function == "startCollectiveFarm") then {
+          true
+        } else {
+          let allowedContracts = tryGetStringFromAccount(masterAccountPubKey.addressFromPublicKey(), "allowed_contracts")
+          let marketplaceAddress = getMarketplaceAddress()
+          let allowedContractsList = allowedContracts.split(";")
+          let dappToCall = inv.dApp.addressFromRecipient().toString()
+          # limit duck buy/sell parameters
+          if (dappToCall == marketplaceAddress) then {
+            throw("_19")
+          # allow to call only contracts from the white-list (duck contracts + swop.fi)
+          } else allowedContractsList.indexOf(dappToCall) != unit
+        }
+      }
+      case ss: SetScriptTransaction => {
+        sigVerify(tx.bodyBytes, tx.proofs[0], masterAccountPubKey)
+      }
+      case _ => false
+    }
+}
