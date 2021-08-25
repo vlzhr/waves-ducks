@@ -4,8 +4,8 @@
 
 let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
 let delayForHatching = 2
-let discountCoefficient = 10
-let typesAmount = 6
+let discountCoefficient = 10 # 10
+let typesAmount = 7
 
 let refContractAddress = base58'3P8ejTkfRpz9WqCwCuihesNXU5k3zmFFfVe'
 let RefererReward = 5 #percentage
@@ -56,8 +56,8 @@ func wasUniqueBorn(gen: String) = {
 
 func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
   let jackpotRandom = getRandomNumber(500, txId, hatchingFinishHeight, 0)
-  if (jackpotRandom == 1 && wasUniqueBorn("DUCK-WWWWWWWW-JU") == 0) then {
-    ("DUCK-WWWWWWWW-JU", "8W-J")
+  if (jackpotRandom == 111 && wasUniqueBorn("DUCK-WWWWWWWM-JU") == 0) then {
+    ("DUCK-WWWWWWWM-JU", "8W-J")
   } else {
     let typeRandom = getRandomNumber(4, txId, hatchingFinishHeight, 0)
     let colorRandom = getRandomNumber(4,  txId, hatchingFinishHeight, 1)
@@ -68,7 +68,7 @@ func getRandomName(txId: ByteVector, hatchingFinishHeight: Int) = {
 
     if (typeRandom == 0) then ("DUCK-FFFFFFFF-G" + color, "8F-G")
       else if (typeRandom == 1) then ("DUCK-DDDDDDDD-G" + color, "8D-G")
-      else if (typeRandom == 2) then ("DUCK-CCCCCCCC-G" + color, "8C-G")
+      else if (typeRandom == 2) then ("DUCK-GGGGGGGG-G" + color, "8G-G")
       else ("DUCK-EEEEEEEE-G" + color, "8E-G")
     }
 }
@@ -91,7 +91,7 @@ func startDuckHatching(refererAddress: String) = {
   if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
    else if (firstPayment.amount < eggsNeeded)  then throw("To hatch a duck you currently need the following amount of EGGlets: " + eggsNeeded.toString())
    else {
-      let refererReward = firstPayment.amount / 100 * RefererReward
+      let refererReward = fraction(eggsNeeded, RefererReward, 100)
       strict refCall = invoke(Address(refContractAddress), "refPayment",
       [refererAddress], [AttachedPayment(eggsAssetId, refererReward)])
 
