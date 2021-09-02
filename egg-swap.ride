@@ -1,0 +1,49 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let kEggIssued = "wasInited"
+let kAssetId = "newEgg_assetId"
+let kTotalSwapped = "totalSwapped"
+let oldEggAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
+
+@Callable(i)
+func issueNewEgg() = {
+  if (getBoolean(kEggIssued) != unit) then throw("New EGG is already issued and its asset id is: " + getStringValue(kAssetId)) else{
+    let newEgg = Issue("Duck Egg", "Utility and Reward token @ WavesDucks.com game. The duckiest token in the world.", 1, 8, true, unit, 0)
+    let newEggId = newEgg.calculateAssetId()
+    [
+      newEgg,
+      BooleanEntry(kEggIssued, true),
+      StringEntry(kAssetId, newEggId.toBase58String())
+    ]
+  }
+}
+
+@Callable(i)
+func swapEgg() = {
+  if (i.payments.size() != 1) then throw("You can attach only EGG tokens") else 
+  if (i.payments[0].value().assetId != oldEggAssetId) then throw("You can attach only EGG tokens") else {
+    let totalSwappedVal = match getInteger(kTotalSwapped) {
+      case int: Int => int
+      case _ => 0
+    }
+    let newEggAssetId = getStringValue(kAssetId).fromBase58String()
+
+    let toSwapAmount = i.payments[0].value().amount
+    let swappedAmount = toSwapAmount * 1_000_000
+
+    let reissue = Reissue(newEggAssetId, swappedAmount, true)
+
+    [
+      reissue,
+      IntegerEntry("swap_" + i.transactionId.toBase58String() + "_amount", toSwapAmount),
+      IntegerEntry(kTotalSwapped, totalSwappedVal + toSwapAmount),
+      ScriptTransfer(i.caller, swappedAmount, newEggAssetId)
+    ]
+  }
+}
+
+@Verifier(tx)
+func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+        
