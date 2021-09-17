@@ -3,8 +3,8 @@
 {-# CONTENT_TYPE DAPP #-}
 {-# SCRIPT_TYPE ACCOUNT #-}
 
-let eggsAssetId = base58'JCGDtrVy64cCJ1wCKfCaiNQMnyYwii71TbE5QeAHfxgF'
-let perchPrice = 100
+let eggsAssetId = base58'C1iWsKGqLwjHUndiQ7iXpdmPum9PeCDFfyXBdJJosDRS'
+let perchPrice = 100*1000000
 let scale = 10000
 let scale2 = 1000000
 
@@ -16,11 +16,18 @@ let RefererReward = 5 #percentage
 
 let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
 
-
 let GENS = ["A", "B", "C", "D", "E", "F", "G"]
 
 func getRewardPerBlock() = {
   684 # 0.0684 EGGs per block
+}
+
+func isLocked() = {
+  let masterAddress = Address(base58'3PEPftf2kWZDmAaWBjs6BUJa9957kiA2PkU')
+  match getInteger(masterAddress, "egglock") {
+        case b:Int => b
+        case _ => 0
+    }
 }
 
 func tryGetInteger(key: String) = {
@@ -152,23 +159,27 @@ func init() = {
 @Callable(i)
 func buyPerch(color: String, refererAddress: String) = {
   # throw("under maintence")
-  if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
-    throw("you need to set color properly")
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-    let firstPayment = i.payments[0].value()
-    if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
-    else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
-    else {
-      let refererRewardForPerch = firstPayment.amount / 100 * RefererReward
+    if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+      throw("you need to set color properly")
+    } else {
+      let firstPayment = i.payments[0].value()
+      if (firstPayment.assetId != eggsAssetId) then throw("You can attach only EGG tokens with the following asset id: " + eggsAssetId.toBase58String())
+      else if (firstPayment.amount != perchPrice) then throw("To buy a perch you currently need the following amount of EGGlets: " + perchPrice.toString())
+      else {
+        let refererRewardForPerch = fraction(firstPayment.amount, RefererReward, 100)
 
-      strict refCall = invoke(Address(refContractAddress), "refPayment",
-      [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
+        strict refCall = invoke(Address(refContractAddress), "refPayment",
+        [refererAddress], [AttachedPayment(eggsAssetId, refererRewardForPerch)])
 
-      let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
-      let perchAmount = tryGetInteger(perchAmountKey)
-      [
-        IntegerEntry(perchAmountKey, perchAmount + 1)
-      ]
+        let perchAmountKey = "address_" + i.caller.toString() + "_perchesAvailable_" + color
+        let perchAmount = tryGetInteger(perchAmountKey)
+        [
+          IntegerEntry(perchAmountKey, perchAmount + 1)
+        ]
+      }
     }
   }
 }
@@ -191,111 +202,126 @@ func addFreePerch(address: String, color: String) = {
 @Callable(i)
 func stakeNFT() = {
   # throw("under maintence")
-  let assetId = i.payments[0].value().assetId.value()
-  let address = i.caller.toString()
-
-  let color = assetInfo(assetId).value().name.takeRight(1)
-  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
-
-  if (availablePerches <= 0) then {
-    throw("no perches available for the color " + color)
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-    let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
-    let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
+    let assetId = i.payments[0].value().assetId.value()
+    let address = i.caller.toString()
 
-    getStakeResult(address, assetId, assetFarmingPower) ++ [
-      IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1)
-    ]
+    let color = assetInfo(assetId).value().name.takeRight(1)
+    let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
+
+    if (availablePerches <= 0) then {
+      throw("no perches available for the color " + color)
+    } else {
+      let (assetGen, assetFarmingPower) = getAssetFarmingPower(assetId)
+      let assetRewardDelta = calcAssetRewardDelta(address, assetId.toBase58String(), assetFarmingPower)
+
+      getStakeResult(address, assetId, assetFarmingPower) ++ [
+        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1)
+      ]
+    }
   }  
 }
 
 @Callable(i)
 func unstakeNFT(asset: String) = {
   # throw("under maintence")
-  let assetId = asset.fromBase58String()
-  let address = i.caller.toString()
-
-  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
-  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
-
-  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
-  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
-
-  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
-
-  let color = assetInfo(assetId).value().name.takeRight(1)
-  if (assetFarmingPower <= 0) then {
-    throw("asset not available")
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-    if (color == "U") then {
-      throw("use another function to unstake Jackpot NFT")
+    let assetId = asset.fromBase58String()
+    let address = i.caller.toString()
+
+    let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+    let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+
+    let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+    let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+    let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+    let color = assetInfo(assetId).value().name.takeRight(1)
+    if (assetFarmingPower <= 0) then {
+      throw("asset not available")
     } else {
+      if (color == "U") then {
+        throw("use another function to unstake Jackpot NFT")
+      } else {
 
-      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
-      result ++ [
-        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
-        ScriptTransfer(i.caller, reward, eggsAssetId),
-        ScriptTransfer(i.caller, 1, assetId)
-      ]
+        let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+        (result ++ [
+          IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+          ScriptTransfer(i.caller, reward * 1000000, eggsAssetId),
+          ScriptTransfer(i.caller, 1, assetId)
+        ], reward * 1000000)
 
+      }
     }
-
   }
 }
 
 @Callable(i)
 func stakeJackpot(color: String) = {
-  let assetId = i.payments[0].value().assetId.value()
-  let address = i.caller.toString()
-  let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
-
-  let assetIssuer = assetInfo(assetId).value().issuer.bytes
-
-  if (assetIssuer == incubatorAddress || assetIssuer == breederAddress) then {
-    if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
-      throw("jackpot only")
-    } else {
-      if (availablePerches <= 0) then {
-        throw("no perches available for the color " + color)
-      } else {
-        getStakeResult(address, assetId, 100) ++ [
-          IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
-          StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
-        ]
-      }
-    }
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-      throw("asset is not valid")
+    let assetId = i.payments[0].value().assetId.value()
+    let address = i.caller.toString()
+    let availablePerches = tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color)
+
+    let assetIssuer = assetInfo(assetId).value().issuer.bytes
+
+    if (assetIssuer == incubatorAddress || assetIssuer == breederAddress) then {
+      if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+        throw("jackpot only")
+      } else {
+        if (availablePerches <= 0) then {
+          throw("no perches available for the color " + color)
+        } else {
+          getStakeResult(address, assetId, 100) ++ [
+            IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, availablePerches - 1),
+            StringEntry("address_"+i.caller.toString()+"_asset_"+assetId.toBase58String()+"_perchColor", color)
+          ]
+        }
+      }
+    } else {
+        throw("asset is not valid")
     }
+  }
 }
 
 @Callable(i)
 func unstakeJackpot(asset: String) = {
-  let assetId = asset.fromBase58String()
-  let address = i.caller.toString()
-
-  let color = tryGetString("address_"+address+"_asset_"+asset+"_perchColor")
-
-  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
-
-  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
-  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
-  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
-
-  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
-
-  if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
-    throw("jackpot only")
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-    if (assetFarmingPower > 0) then {
-      let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
-      result ++ [
-        IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
-        ScriptTransfer(i.caller, reward, eggsAssetId),
-        ScriptTransfer(i.caller, 1, assetId)
-      ]
+    let assetId = asset.fromBase58String()
+    let address = i.caller.toString()
+
+    let color = tryGetString("address_"+address+"_asset_"+asset+"_perchColor")
+
+    let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+
+    let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+    let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+    let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+    let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+    if (assetInfo(assetId).value().name.value().takeRight(1) != "U") then {
+      throw("jackpot only")
     } else {
-      throw("")
+      if (assetFarmingPower > 0) then {
+        let result = getUnstakeResult(address, assetId, assetRewardDelta, reward, assetFarmingPower)
+        (result ++ [
+          IntegerEntry("address_"+i.caller.toString()+"_perchesAvailable_"+color, tryGetInteger("address_"+i.caller.toString()+"_perchesAvailable_"+color) + 1),
+          ScriptTransfer(i.caller, reward * 1000000, eggsAssetId),
+          ScriptTransfer(i.caller, 1, assetId)
+        ], reward * 1000000)
+      } else {
+        throw("")
+      }
     }
   }
 }
@@ -303,27 +329,32 @@ func unstakeJackpot(asset: String) = {
 @Callable(i)
 func claimReward(asset: String) = {
   # throw("under maintence")
-  let address = i.caller.toString()
-  let assetId = asset.fromBase58String()
-
-  let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
-  let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
-  
-  let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
-  let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
-
-  let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
-
-  if (reward <= 0) then {
-    throw("you have no EGGs to withdraw")
+  if (isLocked() > 0) then {
+    throw("EGG operations are temporarily locked")
   } else {
-    [
-      IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount") + reward * scale2),
-      ScriptTransfer(Address(address.fromBase58String()), reward, eggsAssetId)
-    ]
+    let address = i.caller.toString()
+    let assetId = asset.fromBase58String()
+
+    let assetFarmingPower = getLastKnownAssetFarmingPower(address, asset)
+    let assetRewardDelta = calcAssetRewardDelta(address, asset, assetFarmingPower)
+    
+    let farmedAmount = assetRewardDelta + tryGetInteger("address_"+address+"_asset_"+asset+"_lastCheckFarmedAmount")
+    let withdrawnAmount = tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount")
+
+    let reward = (farmedAmount - withdrawnAmount) / (scale * 100)
+
+    if (reward <= 0) then {
+      throw("you have no EGGs to withdraw")
+    } else {
+      ([
+        IntegerEntry("address_"+address+"_asset_"+asset+"_withdrawnAmount", tryGetInteger("address_"+address+"_asset_"+asset+"_withdrawnAmount") + reward * scale2),
+        ScriptTransfer(Address(address.fromBase58String()), reward * 1000000, eggsAssetId)
+      ], reward * 1000000)
+    }
   }
 }
 
 @Verifier(tx)
 func verify() = sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+
         
