@@ -72,7 +72,7 @@ public class TestEnvironment {
         );
 
         EGG = new Asset(
-                EGG_ISSUER.issue(a -> a.name("EGG-" + currentTimeMillis() % 1000).decimals(2).quantity(1_000_000_00))
+                EGG_ISSUER.issue(a -> a.name("EGG-" + currentTimeMillis() % 1000).decimals(8).quantity(1_000_000_00000000L))
                         .tx().assetId());
 
         async(

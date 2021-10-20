@@ -68,7 +68,7 @@ public class BuyPerchTest extends TestEnvironment {
                 dynamicTest(price + " of EGG tokens", () ->
                         assertThrows(() ->
                                 ALICE.invoke(FARMING.buyPerch(randomColor, ""), Amount.of(price, EGG.id()))
-                        ).hasMessageEndingWith("To buy a perch you currently need the following amount of EGGlets: 100")));
+                        ).hasMessageEndingWith("To buy a perch you currently need the following amount of EGGlets: " + EGG.amount(1))));
     }
 
     @TestFactory
@@ -101,8 +101,8 @@ public class BuyPerchTest extends TestEnvironment {
                 .integerEntry(keyPerchesAvailable(ALICE, randomColor), 1)
                 .invoke(REFERRAL.refPayment(BOBBY), EGG.of(0.05), expectedChanges -> expectedChanges
                         .stringEntry(keyReferredBy(ALICE), BOBBY.address().toString())
-                        .integerEntry(keyEarnedReward(BOBBY), 5)
-                        .integerEntry(keyDeliveredReward(BOBBY, ALICE), 5)
+                        .integerEntry(keyEarnedReward(BOBBY), EGG.amount(0.05))
+                        .integerEntry(keyDeliveredReward(BOBBY, ALICE), EGG.amount(0.05))
                         .integerEntry(keyAmount(BOBBY, ALICE), 1)
                         .transfer(BOBBY, EGG.of(0.05))
                 ));
