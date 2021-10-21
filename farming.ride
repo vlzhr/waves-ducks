@@ -44,6 +44,14 @@ func tryGetString(key: String) = {
     }
 }
 
+func isUserBlacklisted(address: String) = {
+  let k = getBoolean(Address(base58'3PAHCfc8ZAwJ26bB32YK6ZNVTVBpgVnGTNc'), "locked_"+address+"_status")
+  match k {
+    case k:Boolean => k 
+    case _ => false
+  }
+}
+
 func getGen(assetName: String) = {
   # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D
   let letters = "ABCDEFGH"
@@ -225,7 +233,9 @@ func stakeNFT() = {
 @Callable(i)
 func unstakeNFT(asset: String) = {
   # throw("under maintenance")
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let assetId = asset.fromBase58String()
@@ -291,7 +301,9 @@ func stakeJackpot(color: String) = {
 
 @Callable(i)
 func unstakeJackpot(asset: String) = {
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let assetId = asset.fromBase58String()
@@ -327,7 +339,9 @@ func unstakeJackpot(asset: String) = {
 @Callable(i)
 func claimReward(asset: String) = {
   # throw("under maintenance")
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let address = i.caller.toString()
