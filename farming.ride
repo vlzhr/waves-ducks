@@ -22,6 +22,8 @@ func getRewardPerBlock() = {
   684 # 0.0684 EGGs per block
 }
 
+func isNotInit() = !this.getInteger("total_startHeight").isDefined()
+
 func isLocked() = {
   let masterAddress = Address(base58'3PEPftf2kWZDmAaWBjs6BUJa9957kiA2PkU')
   match getInteger(masterAddress, "egglock") {
@@ -47,7 +49,7 @@ func tryGetString(key: String) = {
 func isUserBlacklisted(address: String) = {
   let k = getBoolean(Address(base58'3PAHCfc8ZAwJ26bB32YK6ZNVTVBpgVnGTNc'), "locked_"+address+"_status")
   match k {
-    case k:Boolean => k 
+    case k:Boolean => k
     case _ => false
   }
 }
@@ -157,17 +159,22 @@ func getUnstakeResult(address: String, assetId: ByteVector, rewardDelta: Int, wi
 
 @Callable(i)
 func init() = {
-  if (i.caller != this) then { throw("admin only") } else {
+  if (i.caller != this) then
+    throw("admin only")
+  else if !isNotInit() then
+    throw("contract is already initialized")
+  else
     [ IntegerEntry("total_startHeight", height) ]
-  }
 }
 
 @Callable(i)
 func buyPerch(color: String, refererAddress: String) = {
   # throw("under maintenance")
-  if (isLocked() > 0) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
-  } else if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+  } else if (!["B", "R", "G", "Y"].indexOf(color).isDefined()) then {
     throw("you need to set color properly")
   } else {
     let firstPayment = i.payments[0].value()
@@ -192,7 +199,9 @@ func buyPerch(color: String, refererAddress: String) = {
 
 @Callable(i)
 func addFreePerch(address: String, color: String) = {
-  if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (["B", "R", "G", "Y"].indexOf(color).value() < 0) then {
     throw("you need to set color properly")
   } else if ((i.caller != Address(rebirthAddress)) && (i.caller != this)) then {
     throw("rebirth only")
@@ -208,10 +217,13 @@ func addFreePerch(address: String, color: String) = {
 @Callable(i)
 func stakeNFT() = {
   # throw("under maintenance")
-  if (isLocked() > 0) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
-    let assetId = i.payments[0].value().assetId.value()
+    let maybeDuck = i.payments[0].valueOrErrorMessage("attach a duck payment").assetId.valueOrErrorMessage("only ducks are accepted")
+    let assetId = if (Address(incubatorAddress).getString(maybeDuck.toBase58String()).isDefined()) then maybeDuck else throw("only ducks are accepted")
     let address = i.caller.toString()
 
     let color = assetInfo(assetId).value().name.takeRight(1)
@@ -233,7 +245,9 @@ func stakeNFT() = {
 @Callable(i)
 func unstakeNFT(asset: String) = {
   # throw("under maintenance")
-  if (isUserBlacklisted(i.caller.toString())) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isUserBlacklisted(i.caller.toString())) then {
     throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
   } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
@@ -271,7 +285,9 @@ func unstakeNFT(asset: String) = {
 
 @Callable(i)
 func stakeJackpot(color: String) = {
-  if (isLocked() > 0) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let assetId = i.payments[0].value().assetId.value()
@@ -301,7 +317,9 @@ func stakeJackpot(color: String) = {
 
 @Callable(i)
 func unstakeJackpot(asset: String) = {
-  if (isUserBlacklisted(i.caller.toString())) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isUserBlacklisted(i.caller.toString())) then {
     throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
   } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
@@ -339,7 +357,9 @@ func unstakeJackpot(asset: String) = {
 @Callable(i)
 func claimReward(asset: String) = {
   # throw("under maintenance")
-  if (isUserBlacklisted(i.caller.toString())) then {
+  if (isNotInit()) then {
+    throw("not init")
+  } else if (isUserBlacklisted(i.caller.toString())) then {
     throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
   } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")

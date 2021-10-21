@@ -40,12 +40,10 @@ public class FarmingInitTest extends TestEnvironment {
     @TestFactory
     Stream<DynamicTest> cannotInitTwiceByAnotherAccount() {
         var testCounter = new AtomicInteger();
+        FARMING.invoke(FARMING.init());
         return Stream.of(getAllAccountsExcept(FARMING))
-                .map(account -> dynamicTest(testCounter.getAndIncrement() + " " + account.address(), () -> {
-                    FARMING.invoke(FARMING.init());
-
-                    assertThrows(() -> account.invoke(FARMING.init())).hasMessageEndingWith("admin only");
-                }));
+                .map(account -> dynamicTest(testCounter.getAndIncrement() + " " + account.address(), () ->
+                        assertThrows(() -> account.invoke(FARMING.init())).hasMessageEndingWith("admin only")));
     }
 
 }

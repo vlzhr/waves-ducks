@@ -79,9 +79,9 @@ public class BuyPerchTest extends TestEnvironment {
         var randomColor = getRandomColor();
 
         Duck duck = hatchDuck(ALICE);
-        Amount pseudoDuck = Amount.of(1, ALICE.issueNft(a -> a.name("DUCK-AAAAAAAA-GB")).tx().assetId());
+        Amount fakeDuck = Amount.of(1, ALICE.issueNft(a -> a.name("DUCK-AAAAAAAA-GB")).tx().assetId());
 
-        return Stream.of(WAVES.of(0.000001), duck.of(1), pseudoDuck).map(payment ->
+        return Stream.of(WAVES.of(0.000001), duck.of(1), fakeDuck).map(payment ->
                 dynamicTest(payment.toString(), () -> assertThrows(() ->
                         ALICE.invoke(FARMING.buyPerch(randomColor, ""), payment)
                 ).hasMessageEndingWith("You can attach only EGG tokens with the following asset id: " + EGG.id())));

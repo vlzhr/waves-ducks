@@ -47,7 +47,7 @@ public class StakeNftTest extends TestEnvironment {
                 () -> FARMING.invoke(FARMING.init()),
                 () -> getEggsFromFaucet(ALICE, EGG.of(100)));
 
-        Duck duck = hatchFakeDuck(ALICE, "FFFFFFFF", color);
+        Duck duck = hatchPseudoDuck(ALICE, "FFFFFFFF", color);
 
         ALICE.invoke(FARMING.buyPerch(color, ""), EGG.of(1));
         var stakeTx = ALICE.invoke(FARMING.stakeNFT(), duck.of(1));
@@ -63,8 +63,8 @@ public class StakeNftTest extends TestEnvironment {
                 () -> getEggsFromFaucet(ALICE, EGG.of(100)));
 
         var colorB = COLORS.get(0);
-        var duck1 = hatchFakeDuck(ALICE, "AAAAAAAA", colorB);
-        var duck2 = hatchFakeDuck(ALICE, "AAAAAAAA", colorB);
+        var duck1 = hatchPseudoDuck(ALICE, "AAAAAAAA", colorB);
+        var duck2 = hatchPseudoDuck(ALICE, "AAAAAAAA", colorB);
 
         async(
                 () -> ALICE.invoke(FARMING.buyPerch(colorB, ""), p -> p.payments(EGG.of(1)).timestamp(System.currentTimeMillis() - 10000)),
@@ -88,8 +88,8 @@ public class StakeNftTest extends TestEnvironment {
                 () -> getEggsFromFaucet(BOBBY, EGG.of(100)));
 
         var colorB = COLORS.get(0);
-        var aliceDuck = hatchFakeDuck(ALICE, "AAAAAAAA", colorB);
-        var bobbyDuck = hatchFakeDuck(BOBBY, "AAAAAAAA", colorB);
+        var aliceDuck = hatchPseudoDuck(ALICE, "AAAAAAAA", colorB);
+        var bobbyDuck = hatchPseudoDuck(BOBBY, "AAAAAAAA", colorB);
 
         async(
                 () -> ALICE.invoke(FARMING.buyPerch(colorB, ""), EGG.of(1)),
@@ -135,13 +135,13 @@ public class StakeNftTest extends TestEnvironment {
                     () -> FARMING.invoke(FARMING.init()),
                     () -> getEggsFromFaucet(ALICE, EGG.of(10_000)));
 
-            var pseudoDuck = ALICE.issueNft(a -> a.name("DUCK-AAAAAAAA-GB")).tx().assetId();
+            var fakeDuck = ALICE.issueNft(a -> a.name("DUCK-AAAAAAAA-GB")).tx().assetId();
 
             var testCounter = new AtomicInteger();
-            return Stream.of(AssetId.WAVES, EGG.id(), pseudoDuck).map(assetId ->
+            return Stream.of(AssetId.WAVES, EGG.id(), fakeDuck).map(assetId ->
                     dynamicTest(testCounter.getAndIncrement() + ": " + assetId.toString(), () ->
                             assertThrows(() -> ALICE.invoke(FARMING.stakeNFT(), Amount.of(1, assetId)))
-                                    .hasMessageEndingWith("Only ducks are accepted")));
+                                    .hasMessageEndingWith("only ducks are accepted")));
         }
 
     }

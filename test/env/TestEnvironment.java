@@ -105,7 +105,7 @@ public class TestEnvironment {
         return Duck.of(result.transfers().get(0).assetId());
     }
 
-    protected Duck hatchFakeDuck(Account user, String genotype, String color) {
+    protected Duck hatchPseudoDuck(Account user, String genotype, String color) {
         var issueTx = INCUBATOR.issueNft(n -> n
                 .name("DUCK-" + genotype + "-G" + color)
                 .description("{\"genotype\": \"" + genotype + "\", \"crossbreeding\": true}"));
@@ -127,7 +127,7 @@ public class TestEnvironment {
         return duck;
     }
 
-    //TODO breedFakeDuck(...)
+    //TODO breedPseudoDuck(...)
     protected List<Duck> breedDuck(Account user, AssetId duckIdA, AssetId duckIdB) {
         var startInfo = user.invoke(BREEDER.startDuckBreeding(),
                 Amount.of(1, duckIdA), Amount.of(1, duckIdB));
@@ -149,12 +149,12 @@ public class TestEnvironment {
         return breedDuck(user, ducks[0], ducks[1]);
     }
 
-    protected Map<String, Duck> hatchFakeAllColorDucks(Account user) {
+    protected Map<String, Duck> hatchAllColorPseudoDucks(Account user) {
         Map<String, Duck> ducks = new ConcurrentHashMap<>();
         async(Farming.COLORS
                 .stream()
                 .<Runnable> map(color -> () -> {
-                    var duck = hatchFakeDuck(user, "AAAAAAAA", color);
+                    var duck = hatchPseudoDuck(user, "AAAAAAAA", color);
                     ducks.put(duck.color(), duck);
                 }).toArray(Runnable[]::new));
         return ducks;
