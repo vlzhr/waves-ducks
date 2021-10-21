@@ -44,6 +44,14 @@ func tryGetString(key: String) = {
     }
 }
 
+func isUserBlacklisted(address: String) = {
+  let k = getBoolean(Address(base58'3PAHCfc8ZAwJ26bB32YK6ZNVTVBpgVnGTNc'), "locked_"+address+"_status")
+  match k {
+    case k:Boolean => k 
+    case _ => false
+  }
+}
+
 func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
 func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
 func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
@@ -227,7 +235,9 @@ func stakeNFT() = {
 @Callable(i)
 func unstakeNFT(asset: String) = {
   # throw("under maintence")
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let assetId = asset.fromBase58String()
@@ -293,7 +303,9 @@ func stakeJackpot(color: String) = {
 
 @Callable(i)
 func unstakeJackpot(asset: String) = {
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let assetId = asset.fromBase58String()
@@ -329,7 +341,9 @@ func unstakeJackpot(asset: String) = {
 @Callable(i)
 func claimReward(asset: String) = {
   # throw("under maintence")
-  if (isLocked() > 0) then {
+  if (isUserBlacklisted(i.caller.toString())) then {
+    throw("Ooops, looks like you lost in one of the Ducksquid games! As you already know, any loss has its consequences, so you will be not able to claim your farming rewards till the end of DuckSquid game. Quack in peace!")
+  } else if (isLocked() > 0) then {
     throw("EGG operations are temporarily locked")
   } else {
     let address = i.caller.toString()
