@@ -6,6 +6,8 @@ import models.Duck;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
 
@@ -27,23 +29,26 @@ public class BuyPerchTest extends TestEnvironment {
                 .hasMessageEndingWith("not init");
     }
 
-    @TestFactory
-    Stream<DynamicTest> canBuyPerchForAnyColor() {
+    static Stream<String> canBuyPerchForAnyColor() {
+        return COLORS.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    void canBuyPerchForAnyColor(String color) {
         FARMING.invoke(FARMING.init());
         getEggsFromFaucet(ALICE, EGG.of(10));
 
-        return COLORS.stream()
-                .map(color -> dynamicTest(color, () -> {
-                    var invokeInfo = ALICE.invoke(FARMING.buyPerch(color, ""), EGG.of(1));
+        var invokeInfo =
+                ALICE.invoke(FARMING.buyPerch(color, ""), EGG.of(1));
 
-                    assertThat(invokeInfo.stateChanges()).containsExactly(sc -> sc
-                            .integerEntry(keyPerchesAvailable(ALICE, color), 1)
-                            .invoke(REFERRAL.refPayment(""), EGG.of(0.05)));
-                    assertThat(REFERRAL) //todo don't check or move from dynamic test to parameterized and expect 0.05 EGG
-                            .hasBalance(WAVES.of(0.99))
-                            .hasAssetsExactly(EGG.of(0.2));
-                    assertThat(ALICE).hasAssetsExactly(EGG.of(6));
-                }));
+        assertThat(invokeInfo.stateChanges()).containsExactly(sc -> sc
+                .integerEntry(keyPerchesAvailable(ALICE, color), 1)
+                .invoke(REFERRAL.refPayment(""), EGG.of(0.05)));
+        assertThat(REFERRAL)
+                .hasBalance(WAVES.of(0.99))
+                .hasAssetsExactly(EGG.of(0.05));
+        assertThat(ALICE).hasAssetsExactly(EGG.of(9));
     }
 
     @TestFactory
