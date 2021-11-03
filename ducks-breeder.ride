@@ -189,7 +189,7 @@ func finishDuckHatching(txIdStr: String) = {
   if (processTxStatus == HatchingFinished) then {
     let duckId = getStringValue(this, getDuckIdKey(i.caller.toString(), txId))
     throw("The duck was breeded and claimed already, here is the folowing: " + duckId)
-  } else 
+  } else
     if (processFinishHeight > height) then throw("Breeding is not finished yet " + (processFinishHeight - height).toString() + " blocks remaining, it will take around " +  (processFinishHeight - height).toString() + " minutes")
     else {
       let duckGen = generateDuck(txId, processFinishHeight)

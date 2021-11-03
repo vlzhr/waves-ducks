@@ -1,6 +1,6 @@
 # WavesDucks Smart Contracts
 
-Smart contract created on Ride for Waves Ducks game. Created for [https://wavesducks.com](wavesducks.com).
+Smart contract created on Ride for Waves Ducks game. Created for [wavesducks.com](https://wavesducks.com).
 
 This collection of smart contracts implement following functionality:
 
