@@ -5,6 +5,7 @@
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
 let feeAggregator = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
+let eggAssetId = base58'C1iWsKGqLwjHUndiQ7iXpdmPum9PeCDFfyXBdJJosDRS'
 
 let feePercent = 5
 
@@ -22,6 +23,13 @@ func tryGetString(key: String) = {
         case _ => ""
     }
     val
+}
+
+func tryGetBoolean(key: String) = {
+    match getBoolean(this, key) {
+        case b:Boolean => b
+        case _ => false
+    }
 }
 
 func getAssetGenotype(assetId: ByteVector) = {
@@ -45,6 +53,9 @@ func getAssetGenotype(assetId: ByteVector) = {
 }
 
 func getBidCancelResults(auctionId: String, bidId: String) = {
+  let isEggSell = tryGetBoolean("auction_" + auctionId + "_eggSell")
+  let paymentAssetId = if isEggSell == true then eggAssetId else unit
+
   let assetId = this.getStringValue("auction_" + auctionId + "_assetId")
 
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
@@ -53,12 +64,12 @@ func getBidCancelResults(auctionId: String, bidId: String) = {
     StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + bidAuthor + "\", \"amount\": \"" + bidAmount.toString() + "\", \"status\": \"cancelled\"}"),
     StringEntry("auction_" + auctionId + "_bid_" + bidId + "_status", "cancelled"),
     DeleteEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId),
-    ScriptTransfer(Address(bidAuthor.fromBase58String()), bidAmount, unit)
+    ScriptTransfer(Address(bidAuthor.fromBase58String()), bidAmount, paymentAssetId)
   ]
 }
 
 @Callable(i)
-func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
+func initAuction(startPrice: Int, instantPrice: Int, description: String, eggSell: Boolean) = {
   let auctionId = i.transactionId.toBase58String()
   let pmt = i.payments[0].value()
   let assetId = pmt.assetId.value()
@@ -70,6 +81,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String) = {
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "open"),
+      BooleanEntry("auction_" + auctionId + "_eggSell", eggSell),
       StringEntry("auction_" + assetId.toBase58String() + "_last", auctionId),
       StringEntry("auction_" + auctionId + "_assetGen", asset),
       StringEntry("auction_" + auctionId + "_assetId", assetId.toBase58String()),
@@ -103,6 +115,10 @@ func cancelAuction(auctionId: String) = {
 
 @Callable(i)
 func instantBuy(auctionId: String) = {
+  let isEggSell = tryGetBoolean("auction_" + auctionId + "_eggSell")
+  let paymentAssetId = if isEggSell == true then eggAssetId else unit
+  let paymentAssetName = if isEggSell == true then "EGG" else "WAVES"
+
   let pmt = i.payments[0].value()
   let amount = pmt.amount
   let assetId = tryGetString("auction_" + auctionId + "_assetId")
@@ -110,8 +126,8 @@ func instantBuy(auctionId: String) = {
 
   let auctionStatus = tryGetString("auction_" + auctionId + "_status")
 
-  if (pmt.assetId != unit) then {
-    throw("Auction does only support WAVES payments.")
+  if (pmt.assetId != paymentAssetId) then {
+    throw("Auction does only support " + paymentAssetName + " payments.")
   } else {
     if (auctionStatus != "open") then {
       throw("Auction is closed. You cannot place a bid.")
@@ -131,8 +147,8 @@ func instantBuy(auctionId: String) = {
           StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.caller.toString() + "\", \"amount\": \"" + amount.toString() + "\", \"status\": \"finished\"}"),
           DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
           ScriptTransfer(i.caller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String()),
-          ScriptTransfer(addressFromStringValue(auctionOwner), fraction(amount, 100-feePercent, 100), unit),
-          ScriptTransfer(Address(feeAggregator), fraction(amount, feePercent, 100), unit)
+          ScriptTransfer(addressFromStringValue(auctionOwner), fraction(amount, 100-feePercent, 100), paymentAssetId),
+          ScriptTransfer(Address(feeAggregator), fraction(amount, feePercent, 100), paymentAssetId)
         ]
       }
     }
@@ -141,13 +157,17 @@ func instantBuy(auctionId: String) = {
 
 @Callable(i)
 func placeBid(auctionId: String) = {
+  let isEggSell = tryGetBoolean("auction_" + auctionId + "_eggSell")
+  let paymentAssetId = if isEggSell == true then eggAssetId else unit
+  let paymentAssetName = if isEggSell == true then "EGG" else "WAVES"
+
   let pmt = i.payments[0].value()
   let amount = pmt.amount
   let bidId = i.transactionId.toBase58String()
   let assetId = this.getStringValue("auction_" + auctionId + "_assetId")
 
-  if (pmt.assetId != unit) then {
-    throw("Auction does only support WAVES payments")
+  if (pmt.assetId != paymentAssetId) then {
+    throw("Auction does only support " + paymentAssetName + " payments.")
   } else {
     let minPrice = tryGetInteger("auction_" + auctionId + "_startPrice")
     if (minPrice > amount) then {
@@ -197,6 +217,9 @@ func cancelOutdatedBid(auctionId: String, bidId: String) = {
 
 @Callable(i)
 func acceptBid(auctionId: String, bidId: String) = {
+  let isEggSell = tryGetBoolean("auction_" + auctionId + "_eggSell")
+  let paymentAssetId = if isEggSell == true then eggAssetId else unit
+
   let auctionOwner = tryGetString("auction_" + auctionId + "_owner")
   let bidAuthor = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_author")
   let bidAmount = tryGetInteger("auction_" + auctionId + "_bid_" + bidId + "_amount")
@@ -219,8 +242,8 @@ func acceptBid(auctionId: String, bidId: String) = {
         IntegerEntry(assetId + "_recordPrice", newRecordPrice),
         DeleteEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId),
         DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
-        ScriptTransfer(i.caller, fraction(bidAmount, 100-feePercent, 100), unit),
-        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, feePercent, 100), unit),
+        ScriptTransfer(i.caller, fraction(bidAmount, 100-feePercent, 100), eggAssetId),
+        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, feePercent, 100), eggAssetId),
         ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
       ]
     }
