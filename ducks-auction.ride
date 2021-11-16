@@ -242,8 +242,8 @@ func acceptBid(auctionId: String, bidId: String) = {
         IntegerEntry(assetId + "_recordPrice", newRecordPrice),
         DeleteEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId),
         DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
-        ScriptTransfer(i.caller, fraction(bidAmount, 100-feePercent, 100), eggAssetId),
-        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, feePercent, 100), eggAssetId),
+        ScriptTransfer(i.caller, fraction(bidAmount, 100-feePercent, 100), paymentAssetId),
+        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, feePercent, 100), paymentAssetId),
         ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
       ]
     }
