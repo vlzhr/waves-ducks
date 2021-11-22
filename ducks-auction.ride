@@ -4,6 +4,7 @@
 
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+let artefactsAddress = base58''
 let feeAggregator = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
 let eggAssetId = base58'C1iWsKGqLwjHUndiQ7iXpdmPum9PeCDFfyXBdJJosDRS'
 let kGlobalCounter = "GLOBAL_COUNTER"
@@ -38,6 +39,7 @@ func getGlobalCounter() = {
 }
 
 func getAssetGenotype(assetId: ByteVector) = {
+  if (assetInfo(assetId).value().issuer == Address(artefactsAddress)) then "ART" else {
   let asset1 = match getString(Address(incubatorAddress), assetId.toBase58String()) {
         case b:String => b
         case _ => ""
@@ -54,6 +56,7 @@ func getAssetGenotype(assetId: ByteVector) = {
     } else {
       ""
     }
+  }
   }
 }
 
@@ -74,7 +77,7 @@ func getBidCancelResults(auctionId: String, bidId: String) = {
 }
 
 @Callable(i)
-func initAuction(startPrice: Int, instantPrice: Int, description: String, eggSell: Boolean) = {
+func initAuction(startPrice: Int, instantPrice: Int, description: String, eggSell: String) = {
   let globalCounter = getGlobalCounter()
   let auctionId = i.transactionId.toBase58String() + globalCounter.toString()
   let pmt = i.payments[0].value()
@@ -87,7 +90,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String, eggSel
   } else {
     [
       StringEntry("auction_" + auctionId + "_status", "open"),
-      BooleanEntry("auction_" + auctionId + "_eggSell", eggSell),
+      BooleanEntry("auction_" + auctionId + "_eggSell", eggSell == "true"),
       IntegerEntry(kGlobalCounter, globalCounter + 1),
       StringEntry("auction_" + assetId.toBase58String() + "_last", auctionId),
       StringEntry("auction_" + auctionId + "_assetGen", asset),
