@@ -138,7 +138,7 @@ func instantBuy(auctionId: String) = {
 
   let auctionStatus = tryGetString("auction_" + auctionId + "_status")
 
-  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then feePercent else artefactsFeePercent
+  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then artefactsFeePercent else feePercent
 
   if (pmt.assetId != paymentAssetId) then {
     throw("Auction does only support " + paymentAssetName + " payments.")
@@ -242,7 +242,7 @@ func acceptBid(auctionId: String, bidId: String) = {
   let assetId = tryGetString("auction_" + auctionId + "_assetId")
 
 
-  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then feePercent else artefactsFeePercent
+  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then artefactsFeePercent else feePercent
 
   if (i.originCaller.toString() != auctionOwner) then {
     throw("Only allowed to auction owner")
