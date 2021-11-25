@@ -4,12 +4,13 @@
 
 let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
 let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
-let artefactsAddress = base58''
+let artefactsAddress = base58'3P5E9xamcWoymiqLx8ZdmR7o4fJSRMGp1WR'
 let feeAggregator = base58'3P6AobNbcQ3ZjcRY37mJPKN8PP9Giz8kgeY'
 let eggAssetId = base58'C1iWsKGqLwjHUndiQ7iXpdmPum9PeCDFfyXBdJJosDRS'
 let kGlobalCounter = "GLOBAL_COUNTER"
 
 let feePercent = 5
+let artefactsFeePercent = 20
 
 func tryGetInteger(key: String) = {
     let val = match getInteger(this, key) {
@@ -99,6 +100,7 @@ func initAuction(startPrice: Int, instantPrice: Int, description: String, eggSel
       StringEntry("auction_" + auctionId + "_owner", i.originCaller.toString()),
       StringEntry("auction_" + auctionId + "_description", description),
       IntegerEntry("auction_" + auctionId + "_startPrice", startPrice),
+      BooleanEntry("auction_" + auctionId + "_isArtefact", assetInfo(assetId).value().issuer == Address(artefactsAddress)),
       IntegerEntry("auction_" + auctionId + "_instantPrice", instantPrice),
       StringEntry("address_" + i.originCaller.toString() + "_auction_" + auctionId + "_lockedNFT", assetId.toBase58String())
     ]
@@ -136,6 +138,8 @@ func instantBuy(auctionId: String) = {
 
   let auctionStatus = tryGetString("auction_" + auctionId + "_status")
 
+  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then feePercent else artefactsFeePercent
+
   if (pmt.assetId != paymentAssetId) then {
     throw("Auction does only support " + paymentAssetName + " payments.")
   } else {
@@ -157,8 +161,8 @@ func instantBuy(auctionId: String) = {
           StringEntry("assetId_" + assetId + "_bid_" + bidId + "_data", "{\"auctionId\": \"" + auctionId + "\", \"author\": \"" + i.originCaller.toString() + "\", \"amount\": \"" + amount.toString() + "\", \"status\": \"finished\"}"),
           DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
           ScriptTransfer(i.originCaller, 1, this.getStringValue("auction_" + auctionId + "_assetId").fromBase58String()),
-          ScriptTransfer(addressFromStringValue(auctionOwner), fraction(amount, 100-feePercent, 100), paymentAssetId),
-          ScriptTransfer(Address(feeAggregator), fraction(amount, feePercent, 100), paymentAssetId)
+          ScriptTransfer(addressFromStringValue(auctionOwner), fraction(amount, 100 - finalFee, 100), paymentAssetId),
+          ScriptTransfer(Address(feeAggregator), fraction(amount, finalFee, 100), paymentAssetId)
         ]
       }
     }
@@ -237,6 +241,9 @@ func acceptBid(auctionId: String, bidId: String) = {
   let bidStatus = tryGetString("auction_" + auctionId + "_bid_" + bidId + "_status")
   let assetId = tryGetString("auction_" + auctionId + "_assetId")
 
+
+  let finalFee = if tryGetBoolean("auction_" + auctionId + "_isArtefact") == true then feePercent else artefactsFeePercent
+
   if (i.originCaller.toString() != auctionOwner) then {
     throw("Only allowed to auction owner")
   } else {
@@ -255,8 +262,8 @@ func acceptBid(auctionId: String, bidId: String) = {
         IntegerEntry(assetId + "_recordPrice", newRecordPrice),
         DeleteEntry("address_" + bidAuthor + "_auction_" + auctionId + "_bid_" + bidId),
         DeleteEntry("address_" + auctionOwner + "_auction_" + auctionId + "_lockedNFT"),
-        ScriptTransfer(i.caller, fraction(bidAmount, 100-feePercent, 100), paymentAssetId),
-        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, feePercent, 100), paymentAssetId),
+        ScriptTransfer(i.caller, fraction(bidAmount, 100 - finalFee, 100), paymentAssetId),
+        ScriptTransfer(Address(feeAggregator), fraction(bidAmount, finalFee, 100), paymentAssetId),
         ScriptTransfer(addressFromStringValue(bidAuthor), 1, assetId.fromBase58String())
       ]
     }
