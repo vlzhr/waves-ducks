@@ -14,6 +14,7 @@ let HatchingStarted = "HATCHING_STARTED"
 let HatchingFinished = "HATCHING_FINISHED"
 
 let rebirthAddress = base58'3PCC6fVHNa6289DTDmcUo3RuLaFmteZZsmQ'
+let babyDucksAddress = base58'3PKmLiGEfqLWMC1H9xhzqvAZKUXfFm8uoeg'
 
 
 func getHatchingStatusKey(address: String, txId: ByteVector) = {
@@ -145,7 +146,7 @@ func finishDuckHatching(txIdStr: String) = {
 
 @Callable(i)
 func issueFreeDuck(address: String, txIdStr: String) = {
-  if (i.caller != Address(rebirthAddress)) then {
+  if (i.caller != Address(rebirthAddress) && i.caller != Address(babyDucksAddress)) then {
     throw("rebirth only")
   } else {
     let txId = fromBase58String(txIdStr)
