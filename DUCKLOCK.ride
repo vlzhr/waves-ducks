@@ -1,0 +1,149 @@
+{-# STDLIB_VERSION 5 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let incubatorAddress = base58'3PEktVux2RhchSN63DsDo4b4mz4QqzKSeDv'
+let breederAddress = base58'3PDVuU45H7Eh5dmtNbnRNRStGwULA7NY6Hb'
+let farmingAddress = base58'3PAETTtuW7aSiyKtn9GuML3RgtV1xdq1mQW'
+let eggAssetId = base58'C1iWsKGqLwjHUndiQ7iXpdmPum9PeCDFfyXBdJJosDRS'
+
+func checkSignature(tx: Transaction) = {
+  sigVerify(tx.bodyBytes, tx.proofs[0], tx.senderPublicKey)
+}
+
+func tryGetInteger(key: String) = {
+  match getInteger(this, key) {
+      case b:Int => b
+      case _ => 0
+  }
+}
+
+func tryGetString(key: String) = {
+  match getString(this, key) {
+      case a:String => a
+      case _ => ""
+  }
+}
+
+let accessItemAssetId = tryGetString("static_accessItemAssetId").fromBase58String()
+let accessItemPrice = tryGetInteger("static_accessItemPrice")
+let minLockDuration = tryGetInteger("static_minLockDuration")
+
+func isSymbolA(accumulated: Int, sym: String) = { if (sym == "A") then {accumulated+1} else {accumulated+0} }
+func isSymbolB(accumulated: Int, sym: String) = { if (sym == "B") then {accumulated+1} else {accumulated+0} }
+func isSymbolC(accumulated: Int, sym: String) = { if (sym == "C") then {accumulated+1} else {accumulated+0} }
+func isSymbolD(accumulated: Int, sym: String) = { if (sym == "D") then {accumulated+1} else {accumulated+0} }
+func isSymbolE(accumulated: Int, sym: String) = { if (sym == "E") then {accumulated+1} else {accumulated+0} }
+func isSymbolF(accumulated: Int, sym: String) = { if (sym == "F") then {accumulated+1} else {accumulated+0} }
+func isSymbolG(accumulated: Int, sym: String) = { if (sym == "G") then {accumulated+1} else {accumulated+0} }
+func isSymbolH(accumulated: Int, sym: String) = { if (sym == "H") then {accumulated+1} else {accumulated+0} }
+func isSymbolI(accumulated: Int, sym: String) = { if (sym == "I") then {accumulated+1} else {accumulated+0} }
+
+func getAmountOrClear(amount: String) = {
+  if (amount.contains("0")) then {""} else {amount}
+}
+
+func getGen(assetName: String) = {
+  # getGen("DUCK-ABCDDCBA-GY") -> 2A2B2C2D-G
+  let genotype = assetName.drop(5).dropRight(3).split("")
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolA)) + "A") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolB)) + "B") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolC)) + "C") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolD)) + "D") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolE)) + "E") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolF)) + "F") +
+  getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolG)) + "G") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolH)) + "H") + getAmountOrClear(toString(FOLD<8>(genotype, 0, isSymbolI)) + "I")
+}
+
+func getAssetOrigin(generation: String) = {
+  if (generation == "G") then {incubatorAddress} else {breederAddress}
+}
+
+func getAssetRarity(genotype: String, generation: String) = {
+  let quantity = getIntegerValue(Address(getAssetOrigin(generation)), "stats_"+genotype+"_quantity")
+  let power = pow(10000 / quantity, 4, 5, 1, 2, FLOOR)
+  if (power > 0) then {power} else {2}
+}
+
+func getAssetFarmingPower(assetId: ByteVector) = {
+  if (assetInfo(assetId).value().issuer == Address(breederAddress) || assetInfo(assetId).value().issuer == Address(incubatorAddress)) then {
+    let assetName = assetInfo(assetId).value().name
+    let generation = assetName.takeRight(2).take(1)
+    let gen = getGen(assetName) + "-" + generation
+    (gen, getAssetRarity(gen, generation))
+  } else {
+    throw("not valid NFT")
+  }
+}
+
+@Callable(i)
+func preInit(accessItemAssetIdStr: String, accessItemPrice: Int, minLockDuration: Int) = {
+  if (i.caller != this) then throw("Only administrator can call this method") else {
+    [
+      StringEntry("static_accessItemAssetId", accessItemAssetIdStr),
+      IntegerEntry("static_accessItemPrice", accessItemPrice),
+      IntegerEntry("static_minLockDuration", minLockDuration)
+    ]
+  }
+}
+
+@Callable(i)
+func buyAccessItem() = {
+  let pmt = i.payments[0].value()
+  let addressStr = i.caller.toString()
+  if (pmt.assetId != accessItemAssetId) then {throw("wrong asset attached")}
+  else if (pmt.amount != accessItemPrice) then {throw("wrong amount of assets attached")}
+  else {
+    [
+      IntegerEntry("address_" + addressStr + "_spotsBought", tryGetInteger("address_" + addressStr + "_spotsBought") + 1)
+    ]
+  }
+}
+
+@Callable(i)
+func lockDuck() = {
+  let addressStr = i.caller.toString()
+  let assetId = i.payments[0].value().assetId.value()
+  let assetIssuer = assetInfo(assetId).value().issuer.bytes
+  let assetName = assetInfo(assetId).value().name.value()
+  let assetColor = assetName.split("")[size(assetName.split(""))-1]
+  let assetRarity = getAssetFarmingPower(assetId)._2
+
+  let addressSpotsAvailable = tryGetInteger("address_" + addressStr + "_spotsBought") - tryGetInteger("address_" + addressStr + "_spotsBusy")
+
+  if (assetIssuer != incubatorAddress && assetIssuer != breederAddress) then { throw("ivalid NFT attached") } 
+  else if (addressSpotsAvailable <= 0) then { throw("no spots available") }
+  else {
+    strict perchesAvailable = match getInteger(Address(farmingAddress), "address_" + this.toString() + "_perchesAvailable_" + assetColor) {
+      case b:Int => b
+      case _ => 0
+    }
+
+    strict inv1 = if (perchesAvailable > 0) then { unit } else {
+      invoke(Address(farmingAddress), "buyPerch", [assetColor, ""], [AttachedPayment(eggAssetId, 1_0000_0000)])
+    } 
+    strict inv2 = invoke(Address(farmingAddress), "stakeNFT", [], [AttachedPayment(assetId, 1)])  # TODO: jackpot staking
+
+    [
+      IntegerEntry("address_" + addressStr + "_spotsBusy", tryGetInteger("address_" + addressStr + "_spotsBusy") + 1),
+      StringEntry("duck_" + assetId.toBase58String() + "_owner", addressStr),
+      IntegerEntry("address_" + addressStr + "_lockedDuck_" + assetId.toBase58String(), assetRarity),
+      IntegerEntry("duck_" + assetId.toBase58String() + "_lockedAt", height)
+    ]
+  }
+}
+
+@Callable(i)
+func unlockDuck(assetIdStr: String) = {
+  let addressStr = i.caller.toString()
+  let assetId = assetIdStr.fromBase58String()
+
+  if (tryGetString("duck_" + assetIdStr + "_owner") != addressStr) then {throw("duck is not yours")} 
+  else if (height - tryGetInteger("duck_" + assetIdStr + "_lockedAt") < minLockDuration) then {throw("you need to wait to unlock: min " + toString(minLockDuration - height + tryGetInteger("duck_" + assetIdStr + "_lockedAt")))}
+  else {
+    strict inv1 = invoke(Address(farmingAddress), "unstakeNFT", [assetIdStr], [])  # TODO: jackpot unstaking
+    [
+      ScriptTransfer(i.caller, 1, assetId),
+      DeleteEntry("address_" + addressStr + "_lockedDuck_" + assetIdStr), 
+      DeleteEntry("duck_" + assetIdStr + "_owner"), 
+      IntegerEntry("address_" + addressStr + "_spotsBusy", tryGetInteger("address_" + addressStr + "_spotsBusy") - 1)
+    ]
+  }
+}
+        
